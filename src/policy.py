@@ -1,16 +1,14 @@
 import numpy as np
 import jax.numpy as jnp
-import pdb
-from src.utils import softmax, project_onto_simplex
 from scipy import stats
+
 
 class Policy:
     def __init__(self,
         nState,
         nAction,
         temp,
-        seed,
-        p_params=None):
+        seed):
 
         self.nState = nState
         self.nAction = nAction

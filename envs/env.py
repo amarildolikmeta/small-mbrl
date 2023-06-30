@@ -83,7 +83,8 @@ class GymWrapper(gym.Env):
     @property
     def min_reward(self):
         return 0.
-    
+
+
 def setup_environment(
         env_setup: dict,
         env_type: str,

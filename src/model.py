@@ -1,20 +1,17 @@
 import numpy as np
-import jax.numpy as jnp
-import jax
-from itertools import product
-from typing import List, Tuple, Dict
+from typing import Tuple, Dict
 from scipy.stats import dirichlet
-from scipy.special import comb
 from src.policy import Policy #is this gonna give rise to circular dependency?
 from src.agent import Agent
 # SEED = 0
 
+
 # Dirichlet model
 class DirichletModel(Agent):
-    def __init__(self, nState, nAction, seed, discount, initial_distribution, init_lambda, lambda_lr, policy_lr, use_incorrect_priors, alpha0=1., mu0=0., tau0=1., tau=1.):
+    def __init__(self, nState, nAction, seed, discount, initial_distribution, init_lambda, lambda_lr, policy_lr,
+                 use_incorrect_priors, alpha0=1., mu0=0., tau0=1., tau=1.):
         self.nState = nState
         self.nAction = nAction
-        # self.epLen = epLen
         self.use_incorrect_priors = use_incorrect_priors
         self.rng = np.random.RandomState(seed)
         if use_incorrect_priors:
@@ -43,7 +40,7 @@ class DirichletModel(Agent):
         self.initial_distribution = initial_distribution
         self.constraint = -1. #placeholder value, set dynamically later
         temp = 1.0
-        self.policy = Policy(nState, nAction, temp, seed, p_params=None)
+        self.policy = Policy(nState, nAction, temp, seed)
         super().__init__(self.nState, self.discount, self.initial_distribution, self.policy, init_lambda, lambda_lr, policy_lr)
         self.CE_model = (np.zeros((self.nState, self.nAction)), np.zeros((self.nState, self.nAction, self.nState)))
         self.f_best = - np.infty

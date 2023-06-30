@@ -16,3 +16,6 @@ dependencies:
     - safe-grid-gym @ git+https://github.com/david-lindner/safe-grid-gym.git@f521e906735bb712a0217f491f269da2890c0f00
     - ai-safety-gridworlds @ https://github.com/timorl/ai-safety-gridworlds/tarball/master
     - gym==0.24.1
+    - python-igraph
+    - seaborn
+    - plotly~=4.5.4

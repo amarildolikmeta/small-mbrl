@@ -1,21 +1,16 @@
 # from src.logger import graph_single, graph_seeds
 from src.training import MBRLLoop
 from src.model import DirichletModel
-
 from envs.env import setup_environment
-# from src.logger import CSVLogger
-# from deploy import deploy_losses, deploy_MC2PS
 import numpy as np
 import hydra
 import jax
-
 import copy
 import os
 
 
 @hydra.main(config_path="config", config_name="run_test")
 def experiment(args):
-
     env = setup_environment(
         args.env.env_setup,
         args.env.env_type,
@@ -23,7 +18,6 @@ def experiment(args):
         args.env.norm_reward,
         args.seed,
     )
-    # env = hydra.utils.instantiate(args.env.env_setup)
     print(env)
 
     nState = env.nState
@@ -40,7 +34,7 @@ def experiment(args):
     if hasattr(env, 'discount'):
         discount = env.discount
     else:
-        discount = 0.99 
+        discount = args.gamma
 
     print(args.train_type)
     data_dir = f'{args.env.env_id}_{args.train_type.type}_{args.optimization_type}_incorrectpriors{args.use_incorrect_priors}'
@@ -141,6 +135,7 @@ def get_baseline_policy(env, args, nState, nAction, discount, initial_distributi
         np.save(f'{filepath[:-4]}_true_perf.npy', baseline_true_perf)
     
     return p_params_baseline, baseline_true_perf
+
 
 if __name__=="__main__":
     jax.config.update('jax_platform_name', 'cpu')

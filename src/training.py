@@ -17,7 +17,7 @@ class MBRLLoop():
                 p_params_baseline,
                 baseline_true_perf,
                 seed=0, 
-                wandb_entity="rabachi"
+                wandb_entity="alikmeta"
                 ):
         self.env = env
         self.nState = nState
