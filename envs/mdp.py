@@ -412,6 +412,7 @@ def compute_mu(nS):
     mu[0] = 1
     return mu
 
+
 if __name__ == '__main__':
     mdp = random_mdp(5, 2)
     r = mdp.average_rew(0, [0, 1, 1])

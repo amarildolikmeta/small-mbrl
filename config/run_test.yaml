@@ -1,13 +1,13 @@
 defaults:
   - train_type: max-opt-cvar
-  - env: SafetyGrid #CliffWalking #FrozenLake #
+  - env: TwoState #SafetyGrid  #TwoState #CliffWalking #FrozenLake #
   - _self_
 
 init_lambda: 1.0
 reset_params: true
 optimization_type: constrained
 alpha_baseline: 0.8
-num_samples_plan: 500
+num_samples_plan: 100
 num_eps_eval: 10
 num_eps: 10000
 risk_threshold: 0.1
@@ -21,9 +21,16 @@ sigma: 'CVaR' #only for MC2PS
 num_models: 10 #only for MC2PS
 num_discounts: 10 #only for MC2PS
 wandb_entity: 'alikmeta'
-gamma: 0.999
+gamma: 0.99
 seed: 0
 hydra_dir_end: default
+csv_log: true
+exact: true
+return_log_period: 1
+enable_eval: false
+log_inner_distributions: false
+use_softmax: true
+use_adam: true
 
 hydra:
   run:

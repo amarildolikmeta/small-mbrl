@@ -68,32 +68,6 @@ def collect_sa(rng, env, nState, nAction, num_points_per_sa):
     print('finished data collection')
     return replay_buffer
 
-# def collect_sa(rng, env, nState, nAction, num_points_per_sa):
-#     replay_buffer = ReplayBuffer([1], [1], num_points_per_sa * (nState*nAction))
-#     count_sa = np.ones((nState, nAction)) * 0.#num_points_per_sa
-#     # init_states = init_distr.nonzero()
-#     # count_sa[init_states] = 0
-    
-#     collected_all_sa = False if num_points_per_sa > 0 else True
-#     trials = 0
-#     while not collected_all_sa and trials < 1e4:
-#         trials += 1
-#         done = False
-#         state = env.reset()
-#         step = 0
-#         while step < 100: #not collected_all_sa:
-#             action = int(rng.choice(nAction))
-#             next_state, reward, done, _ = env.step(action)
-#             if count_sa[state, action] < num_points_per_sa:
-#                 count_sa[state, action] += 1
-#                 replay_buffer.add(state, action, reward, next_state, done, done)
-#             state = next_state
-#             collected_all_sa = (count_sa >= num_points_per_sa).all()
-#             # print(count_sa)
-#             step += 1
-#     # print(count_sa)
-#     print('finished data collection')
-#     return replay_buffer
 
 def collect_data(rng, env, nEps, nSteps, policy):
     replay_buffer = ReplayBuffer([1], [1], nEps * nSteps)
@@ -115,6 +89,7 @@ def collect_data(rng, env, nEps, nSteps, policy):
             step += 1
     return replay_buffer
 
+
 def discount(rewards, discount_factor) -> np.ndarray:
     rewards_np = np.asarray(rewards)
     t_steps = np.arange(len(rewards))
@@ -122,37 +97,33 @@ def discount(rewards, discount_factor) -> np.ndarray:
     r = r[::-1].cumsum()[::-1] / discount_factor**t_steps
     return r
 
-# def sigmoid(x):
-#     "Numerically stable sigmoid function."
-#     if x >= 0:
-#         z = jnp.exp(-x)
-#         return 1 / (1 + z)
-#     else:
-#         # if x is less than zero then z will be small, denom can't be
-#         # zero because it's 1+z.
-#         z = jnp.exp(x)
-#         return z / (1 + z)
 
 def vmap_sigmoid(x):
     return jax.vmap(sigmoid, in_axes=0, out_axes=0)(x)
 
+
 def get_log_policy(p_params, nState, nAction, temp):
     """
-
     :param p_params:
     :return:
     """
     p_params = p_params.reshape(nState, nAction)
     return jnp.log(p_params) - jnp.log(jnp.sum(p_params, axis=1, keepdims=True))
-    # return jnp.log(jnp.concatenate(p_params, 1 - jnp.sum(p_params, axis=1), axis=1) + jnp.ones_like()*0)
-    # return log_softmax(p_params.reshape(n_states, n_actions), temp)#.reshape(-1,)
-    
+
+
+def stable_softmax(x):
+    z = x - jnp.max(x, axis=1)
+    numerator = jnp.exp(z)
+    denominator = jnp.sum(numerator, axis=1)
+    softmax = numerator/denominator
+    return softmax
+
+
 def get_policy(p_params, nState, nAction):
     p_params = p_params.reshape(nState, nAction)
-    return p_params / jnp.sum(p_params, axis=1, keepdims=True)
-    # return jnp.concatenate(p_params, 1. - jnp.sum(p_params, axis=1), axis=1)
-    # return softmax(p_params.reshape(nState, nAction), 1.0)
-    # return project_onto_simplex(p_params.reshape(nState, nAction), axis=1)
+    policy = stable_softmax(p_params)
+    return policy
+
 
 def project_onto_simplex(params, axis=1):
     zero = 1.e-6
@@ -170,8 +141,8 @@ def project_onto_simplex(params, axis=1):
     cumsum_u_upto_rho = jnp.take_along_axis(cssv, rho - 1, axis=axis)
     lambda_ = (one - cumsum_u_upto_rho) / (rho * 1.0)
     w = jnp.maximum(params + lambda_, zero)
-    # assert(np.isclose(w.sum(axis), 1.0).all(), print(w.sum(axis)))
     return w
+
 
 def log_softmax(vals, temp=1.):
     """Same function as softmax but not exp'd
@@ -182,6 +153,7 @@ def log_softmax(vals, temp=1.):
         """
     return (1. / temp) * vals - logsumexp((1. / temp) * vals, axis=1, keepdims=True)
 
+
 def softmax(vals, temp=1.):
     """Batch softmax
     Args:
@@ -189,13 +161,7 @@ def softmax(vals, temp=1.):
      temp (float, optional): Defaults to 1.. Temperature parameter
     Returns:
     """
-    # z = vals - jnp.max(vals, axis=1, keepdims=True)
-    # numerator = jnp.exp(z)
-    # denom = jnp.sum(numerator, axis=1, keepdims=True)
-    # softmax = numerator/denom
-    softmax = jnp.exp((1. / temp) * vals - logsumexp((1. / temp) *
-                                                  vals, axis=1, keepdims=True))
-    # print(jnp.isclose(test, softmax))
+    softmax = jnp.exp((1. / temp) * vals - logsumexp((1. / temp) * vals, axis=1, keepdims=True))
     return softmax
 
 if __name__ == "__main__":

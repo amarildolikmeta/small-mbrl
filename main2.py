@@ -37,7 +37,7 @@ def experiment(args):
         discount = args.gamma
 
     print(args.train_type)
-    data_dir = f'{args.env.env_id}_{args.train_type.type}_{args.optimization_type}_incorrectpriors{args.use_incorrect_priors}'
+    data_dir = f'{args.env.env_id}_{args.train_type.type}_{args.optimization_type}_incorrectpriors{args.use_incorrect_priors}/'
 
     agent = DirichletModel(
         nState, 
@@ -48,7 +48,9 @@ def experiment(args):
         args.init_lambda,
         args.train_type.lambda_lr,
         args.train_type.policy_lr,
-        args.use_incorrect_priors
+        args.use_incorrect_priors,
+        use_softmax=args.use_softmax,
+        use_adam=args.use_adam
     )
     
     p_params_baseline, baseline_true_perf = 0, 0
@@ -73,9 +75,10 @@ def experiment(args):
         baseline_true_perf,
         seed=int(args.seed),
         wandb_entity=args.wandb_entity,
+        use_csv=args.csv_log
     )
 
-    if args.train_type.type == 'MC2PS': #this one is only offline
+    if args.train_type.type == 'MC2PS': #  this one is only offline
         trainer.training_then_sample(args)
         return
 
@@ -84,7 +87,7 @@ def experiment(args):
         return
 
     trainer.training_loop(args)
-    # trainer.training_then_sample()
+
 
 def get_baseline_policy(env, args, nState, nAction, discount, initial_distribution):
     #TODO:have to figure out how to do this with hydra
@@ -95,7 +98,8 @@ def get_baseline_policy(env, args, nState, nAction, discount, initial_distributi
         p_params_baseline = np.load(filepath)
         baseline_true_perf = np.load(f'{filepath[:-4]}_true_perf.npy')
     else:
-        # if no, train policy to a mid-point on env, then save policy_params to file and return it as well (can run a new agent and MBRLLoop just for PG or something?)
+        # if no, train policy to a mid-point on env, then save policy_params to file and return it as well
+        # (can run a new agent and MBRLLoop just for PG or something?)
         agent = DirichletModel(
             nState, 
             nAction, 
@@ -105,7 +109,9 @@ def get_baseline_policy(env, args, nState, nAction, discount, initial_distributi
             args.init_lambda,
             args.train_type.lambda_lr,
             args.train_type.policy_lr,
-            args.use_incorrect_priors
+            args.use_incorrect_priors,
+            use_softmax=args.use_softmax,
+            use_adam=args.use_adam
         )
         
         data_dir = f'baseline_{args.env.env_id}_{args.train_type.type}'
@@ -137,6 +143,6 @@ def get_baseline_policy(env, args, nState, nAction, discount, initial_distributi
     return p_params_baseline, baseline_true_perf
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     jax.config.update('jax_platform_name', 'cpu')
     experiment()

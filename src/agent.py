@@ -6,12 +6,14 @@ from itertools import product
 from typing import Tuple
 from scipy.special import comb
 from src.utils import get_log_policy, get_policy
+from src.adam import Adam
 import gc
 
 # CVAR_CONSTRAINT = -1.5 #RFL
 # CVAR_CONSTRAINT = -4.0 #cliffwalking
 # CVAR_CONSTRAINT = -10.0 #cliffwalking
 # CVAR_CONSTRAINT = 30.0 #Chain
+
 
 def policy_evaluation(mdp: Tuple[np.ndarray], policy: jnp.ndarray, nState, discount): 
     # Vals[state, timestep]
@@ -22,10 +24,12 @@ def policy_evaluation(mdp: Tuple[np.ndarray], policy: jnp.ndarray, nState, disco
                             discount*ppi, rpi)
     return v_pi
 
+
 def policy_performance(r, p, policy_params, initial_distribution, nState, nAction, discount):
     policy = get_policy(policy_params, nState, nAction)
     vf = policy_evaluation((r, p), policy, nState, discount)
     return initial_distribution @ vf
+
 
 def calculate_value_and_grad(r_matrix, p_matrix, grad_pi, policy, nState, discount, initial_distribution):
     ppi = jnp.einsum('sat,sa->st', p_matrix, policy)
@@ -39,8 +43,10 @@ def calculate_value_and_grad(r_matrix, p_matrix, grad_pi, policy, nState, discou
     j = initial_distribution @ vpi
     return j, j_grad
 
+
 class Agent:
-    def __init__(self, nState, discount, initial_distribution, policy, init_lambda, lambda_lr, policy_lr) -> None:
+    def __init__(self, nState, discount, initial_distribution, policy, init_lambda, lambda_lr, policy_lr,
+                 use_adam=False) -> None:
         self.nState = nState
         self.discount = discount
         self.initial_distribution = initial_distribution
@@ -49,6 +55,9 @@ class Agent:
         self.lambda_param = init_lambda
         self.lambda_lr = lambda_lr
         self.policy_lr = policy_lr
+        self.use_adam = use_adam
+        if self.use_adam:
+            self.adam_optimizer = Adam(policy.get_params().shape[0])
 
     def value_iteration(self, r_matrix: np.ndarray, p_matrix: np.ndarray, epsilon=1e-5):
         V = np.zeros(self.nState)
@@ -326,24 +335,18 @@ class Agent:
             trials += 1
 
         self.policy.update_params(best_suggested)
-        return best_V_p_pi, 0, best_cvar, 0
+        return best_V_p_pi, 0, best_cvar, 0, V_p_pi
 
     # @profile
-    def posterior_sampling(self,
-        p_params,
-        num_samples_plan,
-        risk_threshold,
-        R_j=None,
-        P_j=None
-        ):
+    def posterior_sampling(self, p_params, num_samples_plan, risk_threshold, R_j=None, P_j=None):
         significance_level = 0.1
         eps_rel = 0.1
         U_pi = np.zeros(num_samples_plan)
-        U_pi_grads = np.zeros((num_samples_plan, self.nState, self.nAction))#[]
+        U_pi_grads = np.zeros((num_samples_plan, self.nState, self.nAction))  # []
         continue_sampling = True
         total_samples = 0
         grad_perf = jax.value_and_grad(policy_performance, 2)
-        vmap_grad = jax.vmap(grad_perf, in_axes=(0,0,None,None,None,None,None))
+        vmap_grad = jax.vmap(grad_perf, in_axes=(0, 0, None, None, None, None, None))
         sample_until = False
         if sample_until:
             while continue_sampling:
@@ -381,10 +384,8 @@ class Agent:
         else:
             U_pi_j, U_pi_j_grad = jax.lax.stop_gradient(vmap_grad(R_j, P_j, p_params, self.initial_distribution,
                                                                   self.nState, self.nAction, self.discount))
-
             U_pi = np.asarray(U_pi_j)
             U_pi_grads = np.asarray(U_pi_j_grad)
-            
             total_samples += num_samples_plan
             L_pi = U_pi.shape[0]
             sorted_U_pi = np.sort(U_pi)
@@ -434,7 +435,7 @@ class Agent:
         self.policy.update_params(p_params)
         del U_pi, U_pi_grads
         gc.collect()
-        return av_vpi, objective, cvar_alpha, grad_norm
+        return av_vpi, objective, cvar_alpha, grad_norm, U_pi
 
     def both_max_CVaR(self,
             num_samples_plan: int,
@@ -472,7 +473,7 @@ class Agent:
         grad_norm = np.linalg.norm(p_grad)
         self.policy.update_params(p_params)
 
-        return av_vpi, objective, cvar_alpha, grad_norm
+        return av_vpi, objective, cvar_alpha, grad_norm, U_pi
 
     def optimistic_CVaR_constrained(self,
             optimism_type,
@@ -490,7 +491,7 @@ class Agent:
                                                                                          risk_threshold, R_j=R_j,
                                                                                          P_j=P_j)
 
-        one_indices = np.nonzero(U_pi<var_alpha)
+        one_indices = np.nonzero(U_pi < var_alpha)
         cvar_grad_terms = U_pi_grads[one_indices]
         avg_term = 1./(risk_threshold*num_samples_plan)
         constraint_grad = avg_term * np.sum(cvar_grad_terms, axis=0) 
@@ -519,10 +520,14 @@ class Agent:
 
         damp = 0
         p_grad = optimistic_grad + (self.lambda_param - damp) * constraint_grad
-        p_params = p_params + self.policy_lr * p_grad
+        if self.use_adam:
+            step = self.adam_optimizer.update(p_grad, self.policy_lr)
+        else:
+            step = self.policy_lr * p_grad
+        p_params = p_params + step
         grad_norm = np.linalg.norm(p_grad)
         self.policy.update_params(p_params)
-        return av_vpi, objective, cvar_alpha, grad_norm
+        return av_vpi, objective, cvar_alpha, grad_norm, U_pi
 
     def regret_CVaR_grad_step(self,
             num_samples_plan,

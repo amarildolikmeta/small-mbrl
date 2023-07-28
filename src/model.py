@@ -1,19 +1,20 @@
 import numpy as np
 from typing import Tuple, Dict
 from scipy.stats import dirichlet
-from src.policy import Policy #is this gonna give rise to circular dependency?
-from src.agent import Agent
+from src.policy import Policy, SoftmaxPolicy  # is this gonna give rise to circular dependency?
+from src.agent import Agent, policy_performance
 # SEED = 0
 
 
 # Dirichlet model
 class DirichletModel(Agent):
     def __init__(self, nState, nAction, seed, discount, initial_distribution, init_lambda, lambda_lr, policy_lr,
-                 use_incorrect_priors, alpha0=1., mu0=0., tau0=1., tau=1.):
+                 use_incorrect_priors, alpha0=1., mu0=0., tau0=1., tau=1., use_softmax=True, use_adam=False):
         self.nState = nState
         self.nAction = nAction
         self.use_incorrect_priors = use_incorrect_priors
         self.rng = np.random.RandomState(seed)
+        self.use_softmax = use_softmax
         if use_incorrect_priors:
             self.alpha0 = self.rng.beta(2, 5, size=(self.nState))
             self.mu0 = -1.
@@ -38,10 +39,15 @@ class DirichletModel(Agent):
         self.tau = tau
         self.discount = discount
         self.initial_distribution = initial_distribution
-        self.constraint = -1. #placeholder value, set dynamically later
+        self.constraint = -1.  # placeholder value, set dynamically later
         temp = 1.0
-        self.policy = Policy(nState, nAction, temp, seed)
-        super().__init__(self.nState, self.discount, self.initial_distribution, self.policy, init_lambda, lambda_lr, policy_lr)
+        if use_softmax:
+            self.policy = SoftmaxPolicy(nState, nAction, temp, seed)
+        else:
+            self.policy = Policy(nState, nAction, temp, seed)
+
+        super().__init__(self.nState, self.discount, self.initial_distribution, self.policy, init_lambda, lambda_lr,
+                         policy_lr, use_adam=use_adam)
         self.CE_model = (np.zeros((self.nState, self.nAction)), np.zeros((self.nState, self.nAction, self.nState)))
         self.f_best = - np.infty
 
@@ -92,14 +98,9 @@ class DirichletModel(Agent):
         mus, taus, alphas = self.get_matrix_priors(self.R_prior, self.P_prior)
         for s in range(self.nState):
             for a in range(self.nAction):
-                R_samp[:, s, a] = mus[s,a] + self.rng.normal(size=num_samples) * 1./np.sqrt(taus[s,a])
-                P_samp[:, s,a] = self.rng.dirichlet(alphas[s,a,:], size=num_samples)
+                R_samp[:, s, a] = mus[s, a] + self.rng.normal(size=num_samples) * 1./np.sqrt(taus[s,a])
+                P_samp[:, s, a] = self.rng.dirichlet(alphas[s, a, :], size=num_samples)
         return R_samp, P_samp
-    # def update_CE_model(self, R_samp: np.ndarray, P_samp: np.ndarray, num_samp: int):
-    #     curr_R, curr_P = self.CE_model
-    #     next_R = curr_R + (R_samp - curr_R)/num_samp
-    #     next_P = curr_P + (P_samp - curr_P)/num_samp
-    #     self.CE_model = (next_R, next_P)
 
     def get_CE_model(self):
         p_matrix = np.zeros((self.nState, self.nAction, self.nState))
@@ -110,5 +111,11 @@ class DirichletModel(Agent):
             r_matrix[s, a] = self.R_prior[s, a][0]
             mean_p_matrix[s,a] = dirichlet.mean(p_matrix[s,a])
         p_matrix /= np.sum(p_matrix, axis=2, keepdims=True)
-        # print(np.isclose(p_matrix, mean_p_matrix))
         return r_matrix, mean_p_matrix
+
+    def policy_performance(self, mdp, policy_params=None):
+        if policy_params is None:
+            policy_params = self.policy.get_params()
+        r, p = mdp
+        return policy_performance(r, p, policy_params, self.initial_distribution, self.nState, self.nAction,
+                                  self.discount)

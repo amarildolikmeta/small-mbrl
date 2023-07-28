@@ -2,3 +2,4 @@ type: max-opt
 policy_lr: 0.1
 lambda_lr: 0.0
 mid_train_steps: 500
+low_train_steps: 200

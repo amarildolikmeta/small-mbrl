@@ -1,6 +1,8 @@
 import numpy as np
 from numpy.random import RandomState
 
+from envs.mdp import MDP
+
 
 class continuousLQR(object):
     def __init__(self):
@@ -140,6 +142,38 @@ class State2MDP:
 
         terminal = False
         return (next_state[0], reward, terminal, {})
+
+
+class SimpleMDP(MDP):
+    def __init__(self, epsilon=0.05, gamma=0.99, seed=123456):
+        assert -0.5 <= epsilon <= 0.5
+        P = np.zeros((2, 2, 2))
+        P[0, 0, 0] = 0.5 - epsilon
+        P[0, 0, 1] = 0.5 + epsilon
+
+        P[0, 1, 0] = 0.5 + epsilon
+        P[0, 1, 1] = 0.5 - epsilon
+
+        P[1, 0, 0] = 1.
+        P[1, 0, 1] = 0
+
+        P[1, 1, 0] = 1.
+        P[1, 1, 1] = 0
+
+        R = np.zeros((2, 2))
+        R[1, 1] = 1.
+
+        mu = np.zeros(2)
+        mu[0] = 1.
+        super().__init__(n_states=2, n_actions=2, transitions=P, rewards=R, two_d_r=True, init_state=mu, gamma=gamma)
+        self.rng = np.random.RandomState(seed)
+        self.initial_distribution = mu
+        self.nState = 2
+        self.nAction = 2
+        self.discount = gamma
+
+    def get_name(self):
+        return '2StateMDP'
 
 
 class State_3_MDP(object):

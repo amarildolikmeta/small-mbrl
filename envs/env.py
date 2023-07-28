@@ -1,11 +1,10 @@
-import functools
-from typing import Any, Dict, Optional, Type, Union
+from typing import Optional
 import hydra
 import math
-import pdb
 import gym
-import safe_grid_gym
 import numpy as np
+import safe_grid_gym
+
 
 class SafeGymWrapper(gym.Env):
     def __init__(self, env: gym.Env, norm_reward: bool) -> None:
@@ -25,19 +24,18 @@ class SafeGymWrapper(gym.Env):
     
     def step(self, action):
         next_obs, reward, done, info = self._env.step(action)
-        if self.norm_reward: 
-            # reward = reward - self.min_reward
-            reward = (reward - self.min_reward)/(self.max_reward - self.min_reward)
+        if self.norm_reward:
+            reward = (reward - self.min_reward) / (self.max_reward - self.min_reward)
         return self.map_to_index(next_obs), reward, done, info
     
     def map_to_index(self, obs):
-        hash_key = hash(obs.tobytes()) % self.nState
+        hash_key = hash(obs.tobytes()) % self.nState  # why??
         return hash_key
     
     def terminal_reward(self):
+        # why?
         if self.norm_reward:
-            # return -self.min_reward
-            return -self.min_reward / (self.max_reward - self.min_reward)
+            0 # return -self.min_reward / (self.max_reward - self.min_reward)
         else:
             return 0
 
@@ -58,8 +56,9 @@ class SafeGymWrapper(gym.Env):
     @property
     def hole_reward(self):
         if self.norm_reward:
-            return (self.min_reward - self.min_reward)/(self.max_reward - self.min_reward)
+            return 0
         return self.min_reward
+
 
 class GymWrapper(gym.Env):
     def __init__(self, env: gym.Env) -> None:
