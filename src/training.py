@@ -113,7 +113,8 @@ class MBRLLoop:
         regret, bayesian_regret = 0, 0
         constraints = []
         cvars = []
-        objectives =[]
+        objectives = []
+        policy_returns = []
         print(args.num_eps)
 
         if not args.env.terminates:
@@ -126,7 +127,7 @@ class MBRLLoop:
 
         if not args.enable_eval:
             env_returns = 0
-        elif args.exact:
+        elif args.exact_eval:
             env_returns = float(self.evaluate_agent_exact())
         else:
             env_returns = self.evaluate_agent(args.num_eps_eval, args.env.traj_len)
@@ -147,6 +148,12 @@ class MBRLLoop:
 
         print(f'Iter: {0}, Env rets: {env_returns:.3f}')
         train_iter = 0
+        if args.compute_optimal and hasattr(self.env, "P"):
+            data_dir_optimal = "/".join(self.returns_dir.split("/")[:-4]) + "/"
+            _, V = value_iteration(P=self.env.P, R=self.env.R, gamma=self.agent.discount, max_iter=100000, tol=1e-10,
+                                   qs=False)
+            optimal_value = self.env.initial_distribution @ V
+            np.save(data_dir_optimal + "/optimal_value.npy", optimal_value)
         for ep in range(1, num_eps + 1):
             # generate data
             if args.env.terminates:
@@ -208,9 +215,15 @@ class MBRLLoop:
                         constraints.append(constrain)
                         cvars.append(cvar_alpha)
                         objectives.append(objective)
+                        if args.exact_eval:
+                            policy_perfo = self.evaluate_agent_exact(self.executed_policy_params[-1])
+                        else:
+                            policy_perfo = self.evaluate_agent(args.num_eps_eval, args.env.traj_len)
+                        policy_returns.append(policy_perfo)
                         np.save(self.returns_dir + "/contraints.npy", constraints)
                         np.save(self.returns_dir + "/objectives.npy", objectives)
                         np.save(self.returns_dir + "/cvars.npy", cvars)
+                        np.save(self.returns_dir + "/policy_returns.npy", policy_returns)
                         if train_iter % args.return_log_period == 0:
                             np.save(self.returns_dir + "/return_dist_" + str(train_iter) + ".npy",
                                     np.array(return_distribution).flatten())
@@ -233,8 +246,10 @@ class MBRLLoop:
                     ) = self.train_agent(args)
 
                 if ep % args.log_freq == 0:
-                    if args.env.terminates:
+                    if args.env.terminates and not args.exact_eval:
                         env_returns = self.evaluate_agent(args.num_eps_eval, args.env.traj_len)
+                    elif args.exact_eval:
+                        env_returns = self.evaluate_agent_exact(self.executed_policy_params[-1])
                     else:
                         env_returns = sum_rewards / ep
                     stats = {
@@ -251,7 +266,7 @@ class MBRLLoop:
                         self.logger.writerow(stats)
                     else:
                         wandb.log(stats, step=ep)
-                    print(f'Iter: {ep}, Env rets: {env_returns:.3f}')
+                    print(f'Iter: {ep}, Env rets: {env_returns:.3f}, Policy params: {self.executed_policy_params[-1]}')
 
                 if args.reset_params:
                     self.agent.lambda_param = args.init_lambda
@@ -357,12 +372,14 @@ class MBRLLoop:
         self.agent.policy.update_params(best_params)
         budget = self.calculate_budget(args, p_params_baseline, baseline_true_perf, R_j, P_j)
         if len(self.executed_policy_params) == 0:
-            budget = -5
+            budget = -1000
         self.agent.constraint = budget
         self.agent.policy_lr = args.train_type.policy_lr
         tolerance = 1.0
         p_t = 0.92
         best_cvar = 0
+        if args.const_lambda:
+            args.train_type.mid_train_steps = 1
         for train_step in range(args.train_type.mid_train_steps):
             converged = False
             num_iters = 0
@@ -385,7 +402,9 @@ class MBRLLoop:
                         'risk_threshold': args.risk_threshold,
                         'k_value': args.k_value,
                         'R_j': R_j,
-                        'P_j': P_j
+                        'P_j': P_j,
+                        'constrain_lower_bound': args.constrain_lower_bound,
+                        'upper_delta': args.upper_delta
                     }
                 )
                 converged = (grad_norm < self.epsilon)
@@ -405,13 +424,15 @@ class MBRLLoop:
                     best_return_distribution = return_distribution
 
             self.agent.policy.update_params(best_params)
-            self.agent.lambda_param = np.clip(self.agent.lambda_param - (cvar_alpha - self.agent.constraint) / tolerance,
-                                              a_min=0., a_max=None)
+            if not args.const_lambda:
+                self.agent.lambda_param = np.clip(self.agent.lambda_param -
+                                                  (cvar_alpha - self.agent.constraint) / tolerance,
+                                                    a_min=0., a_max=None)
             tolerance = p_t * tolerance
 
             print(
                 f'train_step: {train_step}, lambda: {self.agent.lambda_param:.3f}, grad_norm: {grad_norm:.3f},'
-                f' tolerance: {tolerance:.3f} distance to constraint: {best_cvar + self.agent.constraint :.3f}')
+                f' tolerance: {tolerance:.3f} distance to constraint: {best_cvar - self.agent.constraint :.3f}')
 
         self.executed_policy_params.append(
             best_params)  # is this part correct? should we play baseline on purpose sometimes or is that covered by the constrained opt?
@@ -547,9 +568,9 @@ class MBRLLoop:
         print(f"REACHED GOAL: {num_goals_reached} times, FAILED: {num_fails} TIMES")
         return float(return_avg)
 
-    def evaluate_agent_exact(self):
+    def evaluate_agent_exact(self, params=None):
         mdp = (self.env.R, self.env.P)
-        v_pi = self.agent.policy_performance(mdp)
+        v_pi = self.agent._policy_performance(mdp, params)
         return v_pi
 
     def training_then_sample(self, args):

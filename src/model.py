@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Tuple, Dict
 from scipy.stats import dirichlet
-from src.policy import Policy, SoftmaxPolicy  # is this gonna give rise to circular dependency?
+from src.policy import Policy, SoftmaxPolicy, LogisticPolicy  # is this gonna give rise to circular dependency?
 from src.agent import Agent, policy_performance
 # SEED = 0
 
@@ -9,12 +9,15 @@ from src.agent import Agent, policy_performance
 # Dirichlet model
 class DirichletModel(Agent):
     def __init__(self, nState, nAction, seed, discount, initial_distribution, init_lambda, lambda_lr, policy_lr,
-                 use_incorrect_priors, alpha0=1., mu0=0., tau0=1., tau=1., use_softmax=True, use_adam=False):
+                 use_incorrect_priors, alpha0=1., mu0=0., tau0=1., tau=1., use_softmax=True, use_adam=False,
+                 use_logistic=False, clip_bonus=False):
         self.nState = nState
         self.nAction = nAction
         self.use_incorrect_priors = use_incorrect_priors
         self.rng = np.random.RandomState(seed)
         self.use_softmax = use_softmax
+        self.use_logistic = use_logistic
+        self.clip_bonus = clip_bonus
         if use_incorrect_priors:
             self.alpha0 = self.rng.beta(2, 5, size=(self.nState))
             self.mu0 = -1.
@@ -43,11 +46,13 @@ class DirichletModel(Agent):
         temp = 1.0
         if use_softmax:
             self.policy = SoftmaxPolicy(nState, nAction, temp, seed)
+        elif use_logistic:
+            self.policy = LogisticPolicy(nState, nAction, temp, seed)
         else:
             self.policy = Policy(nState, nAction, temp, seed)
 
         super().__init__(self.nState, self.discount, self.initial_distribution, self.policy, init_lambda, lambda_lr,
-                         policy_lr, use_adam=use_adam)
+                         policy_lr, use_adam=use_adam, use_logistic=use_logistic)
         self.CE_model = (np.zeros((self.nState, self.nAction)), np.zeros((self.nState, self.nAction, self.nState)))
         self.f_best = - np.infty
 
@@ -113,9 +118,10 @@ class DirichletModel(Agent):
         p_matrix /= np.sum(p_matrix, axis=2, keepdims=True)
         return r_matrix, mean_p_matrix
 
-    def policy_performance(self, mdp, policy_params=None):
+    def _policy_performance(self, mdp, policy_params=None):
         if policy_params is None:
             policy_params = self.policy.get_params()
         r, p = mdp
-        return policy_performance(r, p, policy_params, self.initial_distribution, self.nState, self.nAction,
+
+        return self.policy_performance(r, p, policy_params, self.initial_distribution, self.nState, self.nAction,
                                   self.discount)

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+for s in {1..10}; do
+  for regularization in cvar lower_delta
+  do
+    for objective in max upper_cvar upper_delta
+    do
+      for env in loop chain
+      do
+        for d in 0. 0.1 0.5 1. 2. 5.
+        do
+          python3 vd_pg.py --seed 0 --environment $env --objective $objective --regularization $regularization --alpha 0.1 --delta 0.9 --use_softmax --reset_policy --max_iters 100 --iterations 100 --samples 100 --posterior_samples 500 --lambda_ $d
+        done
+      done
+    done
+  done &
+done

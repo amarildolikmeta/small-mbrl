@@ -112,7 +112,7 @@ def get_log_policy(p_params, nState, nAction, temp):
 
 
 def stable_softmax(x):
-    z = x - jnp.max(x, axis=1)
+    z = x - jnp.max(x, axis=1).T
     numerator = jnp.exp(z)
     denominator = jnp.sum(numerator, axis=1)
     softmax = numerator/denominator
@@ -121,9 +121,17 @@ def stable_softmax(x):
 
 def get_policy(p_params, nState, nAction):
     p_params = p_params.reshape(nState, nAction)
-    policy = stable_softmax(p_params)
+    policy = softmax(p_params)  # stable_softmax(p_params)
     return policy
 
+
+def get_policy_logistic(p_params, nState, nAction):
+    epsilon = jnp.diag(jnp.ones(2) * 1 / (1 + jnp.exp(-p_params)))
+    antidiagonal_epsilon = jnp.fliplr(epsilon)
+    diagonal_epsilon = (jnp.diag(jnp.ones(2)) - epsilon)
+    action_probs = diagonal_epsilon + antidiagonal_epsilon
+    policy = action_probs.reshape(nState, nAction)
+    return policy
 
 def project_onto_simplex(params, axis=1):
     zero = 1.e-6
@@ -163,6 +171,60 @@ def softmax(vals, temp=1.):
     """
     softmax = jnp.exp((1. / temp) * vals - logsumexp((1. / temp) * vals, axis=1, keepdims=True))
     return softmax
+
+
+def bellmap_op(V, P, R, gamma):
+    """
+    Applies the optimal Bellman operator to a value function V.
+
+    :param V: a value function. Shape: (S,)
+    :return: the updated value function and the corresponding greedy action for each state. Shapes: (S,) and (S,)
+    """
+    S, A = P.shape[:2]
+    Q = np.empty((S, A))
+    if R.shape == (S, A, S):
+        R = np.sum(P * R, axis=2)
+    for s in range(S):
+        Q[s] = R[s] + gamma * P[s].dot(V)
+
+    return Q.argmax(axis=1), Q.max(axis=1), Q
+
+
+def value_iteration(P, R, gamma, max_iter=1000, tol=1e-3, verbose=False, qs =False):
+    """
+    Applies value iteration to this MDP.
+
+    :param max_iter: maximum number of iterations
+    :param tol: tolerance required to converge
+    :param verbose: whether to print info
+    :return: the optimal policy and the optimal value function. Shapes: (S,) and (S,)
+    """
+
+    # Initialize the value function to zero
+    V = np.zeros(P.shape[0],)
+
+    for i in range(max_iter):
+        # Apply the optimal Bellman operator to V
+        pi, V_new, Q = bellmap_op(V, P, R, gamma)
+
+        # Check whether the difference between the new and old values are below the given tolerance
+        diff = np.max(np.abs(V - V_new))
+
+        if verbose:
+            print("Iter: {0}, ||V_new - V_old||: {1}, ||V_new - V*||: {2}".format(i, diff,
+                                                                                  2*diff*gamma/(1-gamma)))
+
+        # Terminate if the change is below tolerance
+        if diff <= tol:
+            break
+        # Set the new value function
+        V = V_new
+    if qs:
+        return pi, V, Q
+    else:
+        return pi, V
+
+
 
 if __name__ == "__main__":
     rewards = [1, 2, 3, 4]

@@ -16,17 +16,16 @@ class continuousLQR(object):
         self.discount_factor = 0.9
         
     def seed(self, seed=None):
-        onp.random.seed(seed)
+        np.random.seed(seed)
 
     def reset(self):
-        self.state = -1*onp.ones((self.states_dim,))
+        self.state = -1 * np.ones((self.states_dim,))
         return self.state
 
-    def step(self, action, state, key):
+    def step(self, action, state, key=None):
         del key
-        reward = -(onp.dot(state.T, state) + onp.dot(action.T, action))
-        state_prime = self.A.dot(state) + self.B.dot(action) + onp.random.normal(0, 0.1, 2)
-
+        reward = -(np.dot(state.T, state) + np.dot(action.T, action))
+        state_prime = self.A.dot(state) + self.B.dot(action) + np.random.normal(0, 0.1, 2)
         self.state = state_prime
         return state_prime, reward, 0, {}
 
@@ -73,6 +72,7 @@ class GarnetMDP:
 
     def seed(self, seed=None):
         self.rng = RandomState(seed)
+
 
     def reset(self):
         self.state = self.rng.multinomial(1, self.initial_distribution).nonzero()[0][0]
@@ -176,44 +176,21 @@ class SimpleMDP(MDP):
         return '2StateMDP'
 
 
-class State_3_MDP(object):
-    def __init__(self):
-        '''
-        Initializes:
-        tuple (P, R, gamma) where the first element is a tensor of shape
-        (A x S x S), the second element 'R' has shape (S x A) and the
-        last element is the scalar (float) discount factor.
-        '''
-        super(State_3_MDP, self).__init__()
-        self.p = onp.array([[[0.6, 0.4 - 1e-6, 1e-6], [0.1, 0.8, 0.1], [0.9 - 1e-6, 1e-6, 0.1]],
-                  [[0.98, 0.01, 0.01], [0.2, 1e-6, 0.8 - 1e-6], [1e-6, 0.3, 0.7 - 1e-6]]
-                  ])
-        self.r = onp.array(([[0.1, -0.15],
-                   [0.1, 0.8],
-                   [-0.2, -0.1]
-                   ]))
-        self.discount_factor = 0.9
-        self.state = None
-        self.n_actions, self.n_states = self.p.shape[:2]
-        self.initial_distribution = onp.ones(self.n_states) / self.n_states
-
-    def seed(self, key):
-        '''set random seed for environment'''
-        onp.random.seed(key)
-        # self.key = key
-
-    def reset(self):
-        all_states = onp.arange(self.n_states)
-        self.state = all_states[onp.random.multinomial(1, self.initial_distribution).nonzero()]
-        return onp.asarray(self.state)
-
-    def step(self, action):
-        all_states = onp.arange(self.n_states)
-        next_state_probs = self.p[action, self.state]
-        # next_state = onp.asarray([int(jax.random.bernoulli(key, p=next_state_probs[0][0]))])
-        next_state = all_states[onp.random.multinomial(1, next_state_probs[0]).nonzero()]
-        reward = self.r[self.state, action]
-
-        terminal = False
-        return (next_state, reward, terminal, {})
-
+if __name__ == "__main__":
+    env = SimpleMDP(gamma=0.99)
+    pi, V, Q = env.value_iteration(qs=True, max_iter=100000, tol=1e-10)
+    print(pi)
+    print(V)
+    print(Q)
+    policy = np.array([[1, 0], [0, 1]])
+    ppi = np.einsum('sat,sa->st', env.P, policy)
+    rpi = np.einsum('sa,sa->s', env.R, policy)
+    v_pi = np.linalg.solve(np.eye(2) -
+                            env.gamma * ppi, rpi)
+    print(v_pi)
+    p2 = np.array([[9.99999e-01, 1.00000e-06], [1.00000e-06, 9.99999e-01]])
+    ppi = np.einsum('sat,sa->st', env.P, p2)
+    rpi = np.einsum('sa,sa->s', env.R, p2)
+    v_pi = np.linalg.solve(np.eye(2) -
+                            env.gamma * ppi, rpi)
+    print(v_pi)

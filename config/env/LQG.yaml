@@ -1,0 +1,18 @@
+env_type: self
+env_setup: 
+  _target_: envs.lqg.LQGSimple
+  gamma: 0.99
+  n: 1
+  horizon: 1000
+
+env_id: lqg
+terminates: false
+traj_len: 100
+
+norm_reward: false
+
+start_train_ep: 10
+train_freq_ep: 1
+start_train_step: 1000
+train_freq_step: 100
+

@@ -5,7 +5,7 @@ import jax
 from itertools import product
 from typing import Tuple
 from scipy.special import comb
-from src.utils import get_log_policy, get_policy
+from src.utils import get_log_policy, get_policy, get_policy_logistic
 from src.adam import Adam
 import gc
 
@@ -30,6 +30,10 @@ def policy_performance(r, p, policy_params, initial_distribution, nState, nActio
     vf = policy_evaluation((r, p), policy, nState, discount)
     return initial_distribution @ vf
 
+def policy_performance_logistic(r, p, policy_params, initial_distribution, nState, nAction, discount):
+    policy = get_policy_logistic(policy_params, nState, nAction)
+    vf = policy_evaluation((r, p), policy, nState, discount)
+    return initial_distribution @ vf
 
 def calculate_value_and_grad(r_matrix, p_matrix, grad_pi, policy, nState, discount, initial_distribution):
     ppi = jnp.einsum('sat,sa->st', p_matrix, policy)
@@ -46,7 +50,7 @@ def calculate_value_and_grad(r_matrix, p_matrix, grad_pi, policy, nState, discou
 
 class Agent:
     def __init__(self, nState, discount, initial_distribution, policy, init_lambda, lambda_lr, policy_lr,
-                 use_adam=False) -> None:
+                 use_adam=False, use_logistic=False) -> None:
         self.nState = nState
         self.discount = discount
         self.initial_distribution = initial_distribution
@@ -58,6 +62,10 @@ class Agent:
         self.use_adam = use_adam
         if self.use_adam:
             self.adam_optimizer = Adam(policy.get_params().shape[0])
+        if use_logistic:
+            self.policy_performance = policy_performance_logistic
+        else:
+            self.policy_performance = policy_performance
 
     def value_iteration(self, r_matrix: np.ndarray, p_matrix: np.ndarray, epsilon=1e-5):
         V = np.zeros(self.nState)
@@ -345,7 +353,7 @@ class Agent:
         U_pi_grads = np.zeros((num_samples_plan, self.nState, self.nAction))  # []
         continue_sampling = True
         total_samples = 0
-        grad_perf = jax.value_and_grad(policy_performance, 2)
+        grad_perf = jax.value_and_grad(self.policy_performance, 2)
         vmap_grad = jax.vmap(grad_perf, in_axes=(0, 0, None, None, None, None, None))
         sample_until = False
         if sample_until:
@@ -389,7 +397,6 @@ class Agent:
             total_samples += num_samples_plan
             L_pi = U_pi.shape[0]
             sorted_U_pi = np.sort(U_pi)
-
         U_pi = np.asarray(U_pi)
         U_pi_grads = np.asarray(U_pi_grads)
         floor_index = int(np.floor(risk_threshold * L_pi))
@@ -481,7 +488,9 @@ class Agent:
             k_value,
             risk_threshold,
             R_j,
-            P_j
+            P_j,
+            constrain_lower_bound=False,
+            upper_delta=1.
         ):
         '''
         optimism_type: 'pg' (not optimistic), 'max', 'optimistic-psrl', 'upper-cvar', 'random'
@@ -492,9 +501,18 @@ class Agent:
                                                                                          P_j=P_j)
 
         one_indices = np.nonzero(U_pi < var_alpha)
-        cvar_grad_terms = U_pi_grads[one_indices]
-        avg_term = 1./(risk_threshold*num_samples_plan)
-        constraint_grad = avg_term * np.sum(cvar_grad_terms, axis=0) 
+        L_pi = U_pi.shape[0]
+        floor_index = int(np.floor(risk_threshold * L_pi))
+        ceil_index = int(np.ceil(upper_delta * L_pi))
+        sorted_U_pi = np.sort(U_pi)
+        sorted_grads = [x for _, x in sorted(zip(U_pi, U_pi_grads))]
+
+        if constrain_lower_bound:
+            constraint_grad = sorted_grads[floor_index]
+        else:
+            cvar_grad_terms = U_pi_grads[one_indices]
+            avg_term = 1./(risk_threshold*num_samples_plan)
+            constraint_grad = avg_term * np.sum(cvar_grad_terms, axis=0)
         av_vpi = np.mean(U_pi)
         objective = 0
         upper_risk_threshold = risk_threshold
@@ -506,11 +524,15 @@ class Agent:
             random_idcs = jnp.random.choice(num_samples_plan, size=10)
             optimistic_grad = U_pi_grads[random_idcs][jnp.argmax(U_pi[random_idcs])]
         elif optimism_type == 'max':
-            optimistic_grad = U_pi_grads[np.argmax(U_pi)] 
-            objective = np.max(U_pi)
+            if upper_delta < 1.:
+                optimistic_grad = sorted_grads[ceil_index]
+                objective = sorted_U_pi[ceil_index]
+            else:
+                optimistic_grad = U_pi_grads[np.argmax(U_pi)]
+                objective = np.max(U_pi)
         elif optimism_type == 'upper-cvar':
             upper_v_alpha_quantile, _ = self.quantile_estimate(U_pi, 1 - upper_risk_threshold)
-            upper_one_indices = np.nonzero(U_pi>upper_v_alpha_quantile)
+            upper_one_indices = np.nonzero(U_pi > upper_v_alpha_quantile)
             upper_cvar_grad_terms = U_pi_grads[upper_one_indices]
             upper_avg_term = 1./((1-upper_risk_threshold)*num_samples_plan)
             objective = upper_avg_term * np.sum(U_pi[upper_one_indices], axis=0)
@@ -519,7 +541,9 @@ class Agent:
             raise NotImplementedError(f'{optimism_type} not implemented')
 
         damp = 0
-        p_grad = optimistic_grad + (self.lambda_param - damp) * constraint_grad
+        p_grad = optimistic_grad
+        if not self.clip_bonus or cvar_alpha <= self.constraint:
+            p_grad = p_grad + (self.lambda_param - damp) * constraint_grad
         if self.use_adam:
             step = self.adam_optimizer.update(p_grad, self.policy_lr)
         else:

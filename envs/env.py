@@ -64,8 +64,8 @@ class GymWrapper(gym.Env):
     def __init__(self, env: gym.Env) -> None:
         super().__init__()
         self._env = env
-        self.nState = self._env.observation_space.n
-        self.nAction = self._env.action_space.n
+        self.nState = nState = self._env.observation_space.n
+        self.nAction = nAction = self._env.action_space.n
         self.initial_distribution = self._env.initial_state_distrib
     
     def reset(self):
@@ -81,6 +81,9 @@ class GymWrapper(gym.Env):
     
     @property
     def min_reward(self):
+        return 0.
+
+    def terminal_reward(self):
         return 0.
 
 
@@ -99,3 +102,7 @@ def setup_environment(
         return hydra.utils.instantiate(env_setup)
     else:
         raise ValueError(f'Unknown env type: {env_type}')
+
+if __name__ == "__main__":
+    env = SafeGymWrapper(gym.make("DistributionalShift-v0"), True)
+    print(env.nState)

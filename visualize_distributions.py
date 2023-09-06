@@ -3,6 +3,8 @@ import numpy as np
 import seaborn as sns
 import re
 import glob
+from matplotlib.lines import Line2D
+
 dir_path = "outputs/twoState_max-opt-cvar_constrained_incorrectpriorsFalse/1690477398.6798425"
 dir_path = "outputs/twoState_max-opt-cvar_constrained_incorrectpriorsFalse/1690481413.003639"
 dir_path = "outputs/twoState_max-opt-cvar_constrained_incorrectpriorsFalse/1690482231.4659538"
@@ -12,6 +14,9 @@ dir_path = "outputs/twoState_max-opt-cvar_constrained_incorrectpriorsFalse/16905
 dir_path = "outputs/twoState_max-opt-cvar_constrained_incorrectpriorsFalse/1690569595.4249392"
 dir_path = "outputs/CliffWalking-v0_max-opt-cvar_constrained_incorrectpriorsFalse/1690569639.8797767"
 dir_path = "outputs/twoState_max-opt-cvar_constrained_incorrectpriorsFalse/1690575854.2166948"
+dir_path = "outputs/twoState_max-opt-cvar_constrained_incorrectpriorsFalse/1691604846.3912938"
+dir_path = "outputs/twoState_max-opt-cvar_constrained_incorrectpriorsFalse/1691612222.5710897"
+dir_path = "outputs/DistributionalShift-v0_max-opt-cvar_constrained_incorrectpriorsFalse/1691676375.65314"
 
 paths = glob.glob(dir_path + "/*.npy")
 paths.remove(dir_path + "/cvars.npy")
@@ -19,14 +24,15 @@ paths.remove(dir_path + "/contraints.npy")
 paths.remove(dir_path + "/objectives.npy")
 period = 1
 risk_threshold = 0.1
+
 cvars = np.load(dir_path + "/cvars.npy")
 contraints = np.load(dir_path + "/contraints.npy")
 objectives = np.load(dir_path + "/objectives.npy")
 fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15, 15))
 x = np.array([x for x in range(len(cvars))]) * period
-ax.plot(x, cvars, label="cvar")
-ax.plot(x, contraints, label="constrain")
-ax.plot(x, objectives, label="objective")
+ax.plot(x[1:], cvars[1:], label="cvar")
+ax.plot(x[1:], contraints[1:], label="constrain")
+ax.plot(x[1:], objectives[1:], label="objective")
 ax.set_xlabel("iteration")
 lgd = ax.legend()
 fig.savefig(dir_path + '/curve_training.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
@@ -65,5 +71,10 @@ if len(paths) > 0:
     x_max += 0.15 * spread
     for ax in axs:
         ax.set_xlim(x_min, x_max)
+
+    custom_lines = [Line2D([0], [0], color="red", lw=4),
+                    Line2D([0], [0], color="green", lw=4),
+                    Line2D([0], [0], color="orange", lw=4)]
+    fig.legend(custom_lines, ["constraint", "cvar", "objective"], prop={'size': 25}, loc='upper center')
     fig.savefig(dir_path + "/distributions.pdf")
 

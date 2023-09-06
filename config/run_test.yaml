@@ -1,14 +1,14 @@
 defaults:
   - train_type: max-opt-cvar
-  - env: TwoState #SafetyGrid  #TwoState #CliffWalking #FrozenLake #
+  - env: chain #SafetyGrid  #TwoState #CliffWalking #FrozenLake #chain #DoubleLoop
   - _self_
 
-init_lambda: 1.0
+init_lambda: 0.
 reset_params: true
 optimization_type: constrained
 alpha_baseline: 0.8
 num_samples_plan: 100
-num_eps_eval: 10
+num_eps_eval: 50
 num_eps: 10000
 risk_threshold: 0.1
 k_value: 4
@@ -29,9 +29,15 @@ exact: true
 return_log_period: 1
 enable_eval: false
 log_inner_distributions: false
-use_softmax: true
+use_softmax: True
+use_logistic: False
 use_adam: true
-
+const_lambda: true
+exact_eval: true
+compute_optimal: true
+clip_bonus: true
+upper_delta: 1.
+constrain_lower_bound: false
 hydra:
   run:
     # dir: /scratch/gobi1/abachiro/small_mbrl_results/exp/${now:%Y-%m-%d}/${train_type.type}_${env.env_name}_cvarfirst
