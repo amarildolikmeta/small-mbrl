@@ -49,11 +49,11 @@ def policy_optimization(agent, policy_performance, num_posterior_samples=100, ga
 
         avg_performance = np.mean(U_pi, axis=0)
         floor_index = int(np.floor(alpha * L_pi))
-        ceal_index = int(np.floor(delta * L_pi))
+        ceal_index = int(np.ceil(delta * L_pi))
         var_alpha = sorted_U_pi[floor_index]
         var_delta = sorted_U_pi[ceal_index]
-        cvar_alpha = np.mean(sorted_U_pi[:floor_index])
-        cvar_delta = np.mean(sorted_U_pi[ceal_index:])
+        cvar_alpha = np.mean(sorted_U_pi[:floor_index], axis=0)
+        cvar_delta = np.mean(sorted_U_pi[ceal_index:], axis=0)
         upper_bound = sorted_U_pi[-1]
         lower_bound = sorted_U_pi[0]
         if objective_type == "max":
@@ -64,7 +64,7 @@ def policy_optimization(agent, policy_performance, num_posterior_samples=100, ga
             grad = np.mean(U_pi_grads, axis=0)
         elif objective_type == "upper_cvar":
             objective = cvar_delta
-            grad = np.mean(sorted_grads[ceal_index:])
+            grad = np.mean(sorted_grads[ceal_index:], axis=0)
         elif objective_type == "upper_delta":
             objective = var_delta
             grad = sorted_grads[ceal_index]
@@ -75,7 +75,7 @@ def policy_optimization(agent, policy_performance, num_posterior_samples=100, ga
             constraint_grad = sorted_grads[floor_index]
         elif regularization == "cvar":
             regularization_term = cvar_alpha
-            constraint_grad = np.mean(sorted_grads[:floor_index])
+            constraint_grad = np.mean(sorted_grads[:floor_index], axis=0)
         else:
             raise ValueError("Regularization not implemented:" + regularization)
         objective += lambda_ * regularization_term
