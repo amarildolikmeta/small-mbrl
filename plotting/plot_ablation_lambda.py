@@ -13,13 +13,14 @@ markers = ['o', 's', 'v', 'D', 'x', '*', '|', '+', '^', '2', '1', '3', '4']
 
 
 def running_mean(x, N):
-	divider = np.convolve(np.ones_like(x), np.ones((N,)), mode='same')
-	return np.convolve(x, np.ones((N,)), mode='same') / divider
+    divider = np.convolve(np.ones_like(x), np.ones((N,)), mode='same')
+    return np.convolve(x, np.ones((N,)), mode='same') / divider
 
 
 if __name__ == "__main__":
     args = parse_args()
     N = 1
+    base_dir = "vd_pg_turing"
     gamma = args.gamma
     environment = args.environment
     use_softmax = args.use_softmax
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     lambdas = [0., 1., 5.]  #  0.1, 0.5, 2.,
     resamples = [True, False]
     resets = [True, False]
-    envs = ["loop_turing"] #"", "chain",
+    envs = ["loop", "chain"]  # "loop", "chain",
     objectives = ["max", "upper_cvar", "upper_delta"]
     regularizations = ["cvar", "lower_bound"]
     env_to_lr = {
@@ -67,7 +68,7 @@ if __name__ == "__main__":
         optimal_performance = env_to_optimal[environment]
         for objective_type in objectives:
             for regularization in regularizations:
-                out_dir = "../outputs/vd_pg/" + environment + "/" + objective_type + "/" + regularization + \
+                out_dir = "../outputs/" + base_dir + "/" + environment + "/" + objective_type + "/" + regularization + \
                           "/lambda_ablation/"
                 if not os.path.exists(out_dir):
                     os.makedirs(out_dir)
@@ -75,8 +76,9 @@ if __name__ == "__main__":
 
                 found_lambda = False
                 for i, lambda_ in enumerate(lambdas):
-                    save_dir = "../outputs/vd_pg/" + environment + "/" + objective_type + "/" + regularization + "/lambda_" + \
-                               str(lambda_)[:4] + "/alpha_" + str(alpha)[:4] + "/reset_policy_" + str(reset_policy) + "/post_samples_" \
+                    save_dir = "../outputs/" + base_dir + "/" + environment + "/" + objective_type + "/" + \
+                               regularization + "/lambda_" + str(lambda_)[:4] + "/alpha_" + str(alpha)[:4] + \
+                               "/reset_policy_" + str(reset_policy) + "/post_samples_" \
                                + str(num_posterior_samples) + "_delta_" + str(delta) + "_resample_" + str(resample) + \
                                "_lr_" + str(env_to_lr[environment])[:4]
                     paths = glob.glob(save_dir + "/*/results.npy")
@@ -86,10 +88,15 @@ if __name__ == "__main__":
                         print(save_dir + "/*/results.npy")
                         continue
                     results = []
+                    min_length = np.inf
                     for path in paths:
                         found_lambda = True
                         result = np.load(path)
                         results.append(result)
+                        if result.shape[0] < min_length:
+                            min_length = result.shape[0]
+                    for k, result in enumerate(results):
+                            results[k] = result[:min_length]
                     results = np.stack(results, axis=0)
                     results_mean = np.mean(results, axis=0)
                     results_error = np.std(results, axis=0) / np.sqrt(n)
@@ -109,8 +116,8 @@ if __name__ == "__main__":
 
                 if found_lambda:
 
-                    # ax.plot([x[0], x[-1]], [optimal_performance, optimal_performance], label="optimal", c="black",
-                    #         linestyle='--')
+                    ax.plot([x[0], x[-1]], [optimal_performance, optimal_performance], label="optimal", c="black",
+                            linestyle='--')
                     fig.legend(ncols=len(lambdas) + 1, prop={'size': 25})
                     fig.suptitle(environment)
                     fig.savefig(out_dir + '/lambda_curves.pdf')

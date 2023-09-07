@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 import jax
 from envs.doubleloop import DoubleLoop
 from envs.chain import Chain
+from envs.six_arms import SixArms
+from envs.three_arms import TreeArms
+from envs.wide_narrow import WideNarrow
 from src.policy import Policy, SoftmaxPolicy, LogisticPolicy
 from src.utils import value_iteration
 from src.model import DirichletModel
@@ -94,7 +97,8 @@ def policy_optimization(agent, policy_performance, num_posterior_samples=100, ga
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0, help='Random seed')
-    parser.add_argument('--environment', type=str, default='loop', choices=["loop", "chain"])
+    parser.add_argument('--environment', type=str, default='loop', choices=["loop", "chain", "widenarrow", "sixarms",
+                                                                            "threearms"])
     parser.add_argument('--base_dir', type=str, default='')
     parser.add_argument('--objective', type=str, default='max', choices=["max", "upper_cvar", "upper_delta", "pg"],
                         help="Choice of objective function")
@@ -119,6 +123,7 @@ def parse_args():
     parser.add_argument('--lambda_', type=float, default=0., help="Regularization coefficient")
     parser.add_argument('--verbose', type=int, default=10, help="Print logs")
     parser.add_argument('--period', type=int, default=10, help="Frequency of logs")
+    parser.add_argument('--show', action="store_true", help="Display plot at the end")
 
     "upper_cvar"  # ["max", "upper_cvar", "upper_delta", "pg"]
     "cvar"  # ["cvar", "lower_bound"]
@@ -174,6 +179,15 @@ if __name__ == "__main__":
             env = DoubleLoop(seed=seed, gamma=gamma)
             ylims = (-100, 100)
     elif environment == "chain":
+            env = Chain(discount=gamma, seed=seed)
+            ylims = (0, 800)
+    elif environment == "sixarms":
+            env = Chain(discount=gamma, seed=seed)
+            ylims = (0, 800)
+    elif environment == "threearms":
+            env = Chain(discount=gamma, seed=seed)
+            ylims = (0, 800)
+    elif environment == "widenarrow":
             env = Chain(discount=gamma, seed=seed)
             ylims = (0, 800)
     else:
@@ -285,6 +299,7 @@ if __name__ == "__main__":
         fig.canvas.flush_events()
         fig.savefig(save_dir + '/pg_curve.pdf')
         fig.savefig(save_dir + '/pg_curve.png')
-    # plt.show()
+    if args.show:
+        plt.show()
 
 
