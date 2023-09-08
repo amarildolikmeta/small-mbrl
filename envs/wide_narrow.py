@@ -13,11 +13,62 @@ class WideNarrow:
         self.mu_h, self.sig_h = 0.5, 1.
         self.mu_n, self.sig_n = 0, 1
 
+        self.get_dynamics_and_rewards_distributions()
         self.P, r = self.get_mean_P_and_R()
-        np.sum(self.P * r, axis=2)
+        self.R = np.sum(self.P * r, axis=2)
         self.initial_distribution = np.zeros(self.N * 2 + 1)
         self.initial_distribution[0] = 1.
         self.reset()
+
+    def get_dynamics_and_rewards_distributions(self):
+        '''
+            Implementation of the corresponding method from TabularEnvironment
+        '''
+
+        # Dict for transitions, P_probs[(s, a)] = [(s1, ...), (p1, ...)]
+        P_probs = {}
+
+        for n in range(self.N):
+            for a in range(self.W):
+                # Wide part transitions
+                P_probs[(2 * n, a)] = [(2 * n + 1,), (1.00,)]
+
+            P_probs[(2 * n + 1, 0)] = [(2 * n + 2,), (1.00,)]
+
+        # Last state transitions to first state
+        P_probs[(2 * self.N, 0)] = [(0,), (1.00,)]
+        self.P_probs = P_probs
+
+        def P(s, a):
+
+            # Next states and transition probabilities
+            s_, p = P_probs[(s, a)]
+
+            # Sample s_ according to the transition probabilities
+            s_ = np.random.choice(s_, p=p)
+
+            return s_
+
+        def R(s, a, s_):
+
+            # Booleans for current and next state
+            even_s, odd_s_ = s % 2 == 0, s_ % 2 == 1
+
+            # Zero reward for transition from last to first state
+            if s == 2 * self.N and s_ == 0:
+                return 0.
+            # High reward for correct action from odd state
+            elif even_s and odd_s_ and (a == 0):
+                return self.mu_h + self.sig_h * np.random.normal()
+            # Low reward for incorrect action from odd state
+            elif even_s and odd_s_:
+                return self.mu_l + self.sig_l * np.random.normal()
+            # Reward from even state
+            else:
+                return self.mu_n + self.sig_n * np.random.normal()
+
+        return P, R
+
 
     def get_mean_P_and_R(self):
 
@@ -81,3 +132,10 @@ class WideNarrow:
             reward = self.R[self.state, action]
         self.state = next_state
         return next_state, reward, False, {}
+
+if __name__ == "__main__":
+    env = WideNarrow()
+    pi, V, Q = value_iteration(P=env.P, R=env.R, gamma=env.gamma, qs=True, max_iter=100000, tol=1e-10)
+    print(pi)
+    print(V)
+    print(Q)

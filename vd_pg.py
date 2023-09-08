@@ -124,6 +124,7 @@ def parse_args():
     parser.add_argument('--verbose', type=int, default=10, help="Print logs")
     parser.add_argument('--period', type=int, default=10, help="Frequency of logs")
     parser.add_argument('--show', action="store_true", help="Display plot at the end")
+    parser.add_argument('--suffix', type=str, default='', help="Last folder of logs")
 
     "upper_cvar"  # ["max", "upper_cvar", "upper_delta", "pg"]
     "cvar"  # ["cvar", "lower_bound"]
@@ -167,12 +168,13 @@ if __name__ == "__main__":
     alpha = args.alpha
     delta = args.delta
     verbose = args.verbose
+    suffix = args.suffix
     results = []
     save_dir = args.base_dir + "outputs/vd_pg/" + environment + "/" + objective_type + "/" + regularization + "/lambda_" + \
                str(lambda_)[:4] + "/alpha_" + str(alpha)[:4] + "/reset_policy_" + str(reset_policy) + "/post_samples_" \
                + str(num_posterior_samples) + "_delta_" + str(delta) + "_resample_" + str(resample) + \
                "_lr_" + str(learning_rate)[:4]
-
+    save_dir += suffix
     save_dir += "/s" + str(seed) + "/"
 
     if environment == "loop":
@@ -182,13 +184,13 @@ if __name__ == "__main__":
             env = Chain(discount=gamma, seed=seed)
             ylims = (0, 800)
     elif environment == "sixarms":
-            env = Chain(discount=gamma, seed=seed)
+            env = SixArms(gamma=gamma, seed=seed)
             ylims = (0, 800)
     elif environment == "threearms":
-            env = Chain(discount=gamma, seed=seed)
+            env = TreeArms(gamma=gamma, seed=seed)
             ylims = (0, 800)
     elif environment == "widenarrow":
-            env = Chain(discount=gamma, seed=seed)
+            env = WideNarrow(gamma=gamma, seed=seed)
             ylims = (0, 800)
     else:
             raise ValueError("Env not implemented:" + environment)

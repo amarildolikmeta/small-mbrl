@@ -45,7 +45,8 @@ def stable_softmax(x):
 class SoftmaxPolicy(Policy):
     def __call__(self, curr_state):
         p_params = self.p_params.reshape(self.nState, self.nAction)[curr_state]
-        action_probs = stable_softmax(p_params)
+        action_probs = stable_softmax(p_params).astype('float64')
+        action_probs /= action_probs.sum()
         return self.rng.multinomial(1, action_probs).nonzero()[0][0]
 
     def update_params(self, p_params):
