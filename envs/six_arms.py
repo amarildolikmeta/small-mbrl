@@ -56,6 +56,7 @@ class SixArms:
         self.nState = nS
         self.nAction = nA
         rew = [50, 133, 300, 800, 1660, 6000]
+        rew = (np.array(rew) / 6000).tolist()
         self.initial_distribution = compute_mu(nS)
         self.P = compute_probabilities(nS=nS, nA=nA)
         self.R = np.sum(self.P * compute_rewards(nS, nA, rew), axis=2)

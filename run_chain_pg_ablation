@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+resets=("" --reset_policy)
+resamples=("" --resample)
+
+for s in {1..5}; do
+    for reset in "${resets[@]}";
+    do
+      for resample in "${resets[@]}";
+      do
+      python3 vd_pg.py --seed 0 --environment chain --objective pg --regularization cvar --alpha 0.1 --delta 0.9 --use_softmax --lr 0.1 $resample $reset --max_iters 100 --iterations 50 --samples 100 --posterior_samples 20 --lambda_ 0. &
+      done
+    done &
+done

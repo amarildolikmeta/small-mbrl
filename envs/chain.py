@@ -79,6 +79,7 @@ class Chain:
         self.state = next_state
         return next_state, reward, False, {}
 
+
 if __name__ == "__main__":
     env = Chain()
     pi, V, Q = value_iteration(P=env.P, R=env.R, gamma=env.gamma, qs=True, max_iter=100000, tol=1e-10)

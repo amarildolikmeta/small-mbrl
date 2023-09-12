@@ -150,6 +150,9 @@ class MDP(object):
         assert state < self.P.shape[0]
         self.state = state
 
+    def get_state(self):
+        return self.state
+
     def step(self, action):
         next_state = np.random.choice(self.S, p=self.P[self.state, action])
         if len(self.R.shape) == 3:

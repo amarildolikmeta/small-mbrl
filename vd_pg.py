@@ -10,10 +10,14 @@ from envs.chain import Chain
 from envs.six_arms import SixArms
 from envs.three_arms import TreeArms
 from envs.wide_narrow import WideNarrow
+from envs.basic_envs import SimpleMDP
+from envs.gridworld import GridWorld
 from src.policy import Policy, SoftmaxPolicy, LogisticPolicy
 from src.utils import value_iteration
 from src.model import DirichletModel
 from basic_pg import policy_performance
+import seaborn as sns
+from matplotlib.lines import Line2D
 
 
 def collect_samples_and_update_prior(agent, env, num_samples):
@@ -26,61 +30,87 @@ def collect_samples_and_update_prior(agent, env, num_samples):
             env.reset()
 
 
+def compute_statistics(values, objective_type, regularization, grads=None):
+    values = np.asarray(values)
+    L_pi = values.shape[0]
+    sorted_values = np.sort(values)
+    if grads is not None:
+        grads = np.asarray(grads)
+        sorted_grads = [x for _, x in sorted(zip(values, grads), key=lambda x: x[0])]
+
+    avg_performance = np.mean(values, axis=0)
+    floor_index = int(np.floor(alpha * L_pi))
+    ceal_index = int(np.ceil(delta * L_pi))
+    var_alpha = sorted_values[floor_index]
+    var_delta = sorted_values[ceal_index]
+    cvar_alpha = np.mean(sorted_values[:floor_index], axis=0)
+    cvar_delta = np.mean(sorted_values[ceal_index:], axis=0)
+    upper_bound = sorted_values[-1]
+    lower_bound = sorted_values[0]
+    if objective_type == "max":
+        objective = sorted_values[-1]
+        if grads is not None:
+            grad = sorted_grads[-1]
+    elif objective_type == "pg":
+        objective = avg_performance
+        if grads is not None:
+            grad = np.mean(grads, axis=0)
+    elif objective_type == "upper_cvar":
+        objective = cvar_delta
+        if grads is not None:
+            grad = np.mean(sorted_grads[ceal_index:], axis=0)
+    elif objective_type == "upper_delta":
+        objective = var_delta
+        if grads is not None:
+            grad = sorted_grads[ceal_index]
+    else:
+        raise ValueError("Objective not implemented:" + objective_type)
+    if regularization == "lower_bound":
+        regularization_term = var_alpha
+        if grads is not None:
+            constraint_grad = sorted_grads[floor_index]
+    elif regularization == "cvar":
+        regularization_term = cvar_alpha
+        if grads is not None:
+            constraint_grad = np.mean(sorted_grads[:floor_index], axis=0)
+    else:
+        raise ValueError("Regularization not implemented:" + regularization)
+
+    if grads is None:
+        grad = None
+        constraint_grad = None
+    return avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective, regularization_term, grad,\
+        constraint_grad
+
+
 def policy_optimization(agent, policy_performance, num_posterior_samples=100, gamma=0.99, objective_type="max",
                         regularization="cvar", alpha=0.1, delta=0.9, lambda_=0.,  optimization_iterations=100,
                         optimization_tolerance=1e-4, policy_lr=1., reset_policy=False, resample=False):
-    if reset_policy:
-        agent.policy.reset_params()
+    p_params = agent.policy.get_params()
     R_j, P_j = agent.multiple_sample_mdp(num_posterior_samples)
+    init_dist = agent.initial_distribution
     nStates, nAction = P_j[0].shape[:2]
     grad_perf = jax.value_and_grad(policy_performance, 2)
     vmap_grad = jax.vmap(grad_perf, in_axes=(0, 0, None, None, None, None, None))
+    U_pi_j, U_pi_j_grad = jax.lax.stop_gradient(vmap_grad(R_j, P_j, p_params, init_dist,
+                                                          nState, nAction, gamma))
+    initial_distribution = U_pi_j
     it = 0
+    if reset_policy:
+        agent.policy.reset_params()
     converged = False
     while it < optimization_iterations and not converged:
         p_params = agent.policy.get_params()
-        U_pi_j, U_pi_j_grad = jax.lax.stop_gradient(vmap_grad(R_j, P_j, p_params, initial_distribution,
+        U_pi_j, U_pi_j_grad = jax.lax.stop_gradient(vmap_grad(R_j, P_j, p_params, init_dist,
                                                               nState, nAction, gamma))
         U_pi = np.asarray(U_pi_j)
         U_pi_grads = np.asarray(U_pi_j_grad)
-        L_pi = U_pi.shape[0]
-        sorted_U_pi = np.sort(U_pi)
-        sorted_grads = [x for _, x in sorted(zip(U_pi, U_pi_grads), key=lambda x: x[0])]
-        U_pi = np.asarray(U_pi)
-        U_pi_grads = np.asarray(U_pi_grads)
 
+        avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective,\
+            regularization_term, grad, constraint_grad = compute_statistics(values=U_pi, objective_type=objective_type,
+                                                                            regularization=regularization,
+                                                                            grads=U_pi_grads)
 
-        avg_performance = np.mean(U_pi, axis=0)
-        floor_index = int(np.floor(alpha * L_pi))
-        ceal_index = int(np.ceil(delta * L_pi))
-        var_alpha = sorted_U_pi[floor_index]
-        var_delta = sorted_U_pi[ceal_index]
-        cvar_alpha = np.mean(sorted_U_pi[:floor_index], axis=0)
-        cvar_delta = np.mean(sorted_U_pi[ceal_index:], axis=0)
-        upper_bound = sorted_U_pi[-1]
-        lower_bound = sorted_U_pi[0]
-        if objective_type == "max":
-            objective = sorted_U_pi[-1]
-            grad = sorted_grads[-1]
-        elif objective_type == "pg":
-            objective = avg_performance
-            grad = np.mean(U_pi_grads, axis=0)
-        elif objective_type == "upper_cvar":
-            objective = cvar_delta
-            grad = np.mean(sorted_grads[ceal_index:], axis=0)
-        elif objective_type == "upper_delta":
-            objective = var_delta
-            grad = sorted_grads[ceal_index]
-        else:
-            raise ValueError("Objective not implemented:" + objective_type)
-        if regularization == "lower_bound":
-            regularization_term = var_alpha
-            constraint_grad = sorted_grads[floor_index]
-        elif regularization == "cvar":
-            regularization_term = cvar_alpha
-            constraint_grad = np.mean(sorted_grads[:floor_index], axis=0)
-        else:
-            raise ValueError("Regularization not implemented:" + regularization)
         objective += lambda_ * regularization_term
         p_grad = grad + lambda_ * constraint_grad
         p_params = p_params + policy_lr * p_grad
@@ -90,15 +120,18 @@ def policy_optimization(agent, policy_performance, num_posterior_samples=100, ga
         it += 1
         if resample:
             R_j, P_j = agent.multiple_sample_mdp(num_posterior_samples)
+    p_params = agent.policy.get_params()
+    U_pi_j, U_pi_j_grad = jax.lax.stop_gradient(vmap_grad(R_j, P_j, p_params, init_dist,
+                                                          nState, nAction, gamma))
     return lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound, grad_norm,\
-        converged, it, objective
+        converged, it, U_pi_j, initial_distribution, objective
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0, help='Random seed')
     parser.add_argument('--environment', type=str, default='loop', choices=["loop", "chain", "widenarrow", "sixarms",
-                                                                            "threearms"])
+                                                                            "threearms", "2_state", "grid"])
     parser.add_argument('--base_dir', type=str, default='')
     parser.add_argument('--objective', type=str, default='max', choices=["max", "upper_cvar", "upper_delta", "pg"],
                         help="Choice of objective function")
@@ -122,9 +155,10 @@ def parse_args():
     parser.add_argument('--tolerance', type=float, default=1e-3, help="Inner optimization tolerance")
     parser.add_argument('--lambda_', type=float, default=0., help="Regularization coefficient")
     parser.add_argument('--verbose', type=int, default=10, help="Print logs")
-    parser.add_argument('--period', type=int, default=10, help="Frequency of logs")
+    parser.add_argument('--period', type=int, default=10, help="Frequency of distribution plot")
     parser.add_argument('--show', action="store_true", help="Display plot at the end")
     parser.add_argument('--suffix', type=str, default='', help="Last folder of logs")
+    parser.add_argument('--root_dir', type=str, default='vd_pg_tests_2', help="First folder of logs")
 
     "upper_cvar"  # ["max", "upper_cvar", "upper_delta", "pg"]
     "cvar"  # ["cvar", "lower_bound"]
@@ -169,8 +203,11 @@ if __name__ == "__main__":
     delta = args.delta
     verbose = args.verbose
     suffix = args.suffix
+    root_dir = args.root_dir
     results = []
-    save_dir = args.base_dir + "outputs/vd_pg/" + environment + "/" + objective_type + "/" + regularization + "/lambda_" + \
+    distributions = []
+    initial_distributions = []
+    save_dir = args.base_dir + "outputs/" + root_dir + "/" + environment + "/" + objective_type + "/" + regularization + "/lambda_" + \
                str(lambda_)[:4] + "/alpha_" + str(alpha)[:4] + "/reset_policy_" + str(reset_policy) + "/post_samples_" \
                + str(num_posterior_samples) + "_delta_" + str(delta) + "_resample_" + str(resample) + \
                "_lr_" + str(learning_rate)[:4]
@@ -191,6 +228,12 @@ if __name__ == "__main__":
             ylims = (0, 800)
     elif environment == "widenarrow":
             env = WideNarrow(gamma=gamma, seed=seed)
+            ylims = (0, 800)
+    elif environment == "2_state":
+            env = SimpleMDP(gamma=gamma, seed=seed)
+            ylims = (0, 800)
+    elif environment == "grid":
+            env = GridWorld(gamma=gamma, seed=seed)
             ylims = (0, 800)
     else:
             raise ValueError("Env not implemented:" + environment)
@@ -252,7 +295,7 @@ if __name__ == "__main__":
     for i in range(iterations):
         collect_samples_and_update_prior(agent, env, environment_samples_per_iteration)
         lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound, grad_norm, converged,\
-            it, objective = policy_optimization(agent=agent, policy_performance=policy_performance,
+            it, U_pi_j, initial_distribution, objective = policy_optimization(agent=agent, policy_performance=policy_performance,
                                      num_posterior_samples=num_posterior_samples, objective_type=objective_type,
                                      regularization=regularization, lambda_=lambda_, alpha=alpha, delta=delta,
                                      optimization_iterations=max_iters, optimization_tolerance=tolerance,
@@ -262,10 +305,14 @@ if __name__ == "__main__":
         policy_perfo = agent._policy_performance(mdp, agent.policy.get_params())
         results.append([lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound,
                         grad_norm, converged, it, objective, policy_perfo])
+        distributions.append(U_pi_j)
+        initial_distributions.append(initial_distribution)
         if verbose:
             print("Finished Iteration:" + str(i + 1))
         results_array = np.array(results)
         np.save(save_dir + "/results.npy", results_array)
+        np.save(save_dir + "/distributions.npy", np.array(distributions))
+        np.save(save_dir + "/initial_distributions.npy", np.array(initial_distributions))
         lower_bounds = results_array[:, 0]
         cvar_alphas = results_array[:, 2]
         avg_post_performances = results_array[:, 3]
@@ -301,7 +348,66 @@ if __name__ == "__main__":
         fig.canvas.flush_events()
         fig.savefig(save_dir + '/pg_curve.pdf')
         fig.savefig(save_dir + '/pg_curve.png')
+
     if args.show:
         plt.show()
+    n_rows = len(distributions) // period + 1
+    n_cols = 2
+    fig, axs = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(30, 15))
+    x_min = np.inf
+    x_max = -np.inf
+    for i in range(len(distributions)):
+        if i % period != 0:
+            continue
+        values = np.array(distributions[i])
+        initial_values = np.array(initial_distributions[i])
 
+        avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective, \
+            regularization_term, _, _ = \
+            compute_statistics(values=values, objective_type=objective_type, regularization=regularization, grads=None)
 
+        ax = axs[i // period][1]
+        _x_min = np.min(values)
+        _x_max = np.max(values)
+        if _x_min < x_min:
+            x_min = _x_min
+        if _x_max > x_max:
+            x_max = _x_max
+        ax.set_title("Iteration " + str(i) + "final distribution")
+        ax.axvline(regularization_term, c="orange")
+        ax.axvline(objective, c="green")
+        ax.axvline(objective + lambda_ * regularization_term, c="blue")
+        sns.distplot(values, ax=ax, kde=True, label="iteration_" + str(i), color='c')
+        sns.distplot(initial_values, ax=ax, kde=True, label="iteration_" + str(i), color='purple',
+                     hist_kws=dict(alpha=0.3))
+
+        _x_min = np.min(initial_values)
+        _x_max = np.max(initial_values)
+        avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective, \
+            regularization_term, grad, constraint_grad = compute_statistics(values=initial_values,
+                                                                            objective_type=objective_type,
+                                                                            regularization=regularization)
+        if _x_min < x_min:
+            x_min = _x_min
+        if _x_max > x_max:
+            x_max = _x_max
+        ax = axs[i // period][0]
+        ax.set_title("Iteration " + str(i) + "initial distribution")
+        ax.axvline(regularization_term, c="orange")
+        ax.axvline(objective, c="green")
+        ax.axvline(objective + lambda_ * regularization_term, c="blue")
+        sns.distplot(initial_values, ax=ax, kde=True, label="iteration_" + str(i), color='c')
+
+    spread = x_max - x_min
+    x_min -= 0.15 * spread
+    x_max += 0.15 * spread
+    for k in range(n_rows):
+        axs[k][0].set_xlim(x_min, x_max)
+        axs[k][1].set_xlim(x_min, x_max)
+
+    custom_lines = [Line2D([0], [0], color="green", lw=4),
+                    Line2D([0], [0], color="orange", lw=4),
+                    Line2D([0], [0], color="blue", lw=4)]
+    fig.legend(custom_lines, ["obj_func", "regularization", "regularized_obj"], prop={'size': 25}, loc='upper center')
+    fig.savefig(save_dir + "/distributions.pdf")
+    fig.savefig(save_dir + "/distributions.png")
