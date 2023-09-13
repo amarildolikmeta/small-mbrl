@@ -32,7 +32,7 @@ class GridWorld(gym.Env):
         'video.frames_per_second': 30
     }
 
-    def __init__(self, shape=(7, 7), fail_prob=0.1, goal=None, start=None, gamma=0.99,
+    def __init__(self, shape=(4, 4), fail_prob=0.1, goal=None, start=None, gamma=0.99,
                  rew_weights=None, randomized_initial=True, extended_features=False, seed=None):
 
         assert shape[0] >= 3 and shape[1] >= 3, "The grid must be at least 3x3"

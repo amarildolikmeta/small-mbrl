@@ -139,20 +139,19 @@ if __name__ == "__main__":
     suffix = "chain_low_l"
 
     dirs = [
-        "../outputs/vd_pg_presentation/loop/max/lower_bound/lambda_0.01/alpha_0.01/reset_policy_True/post_samples_1000_delta_0.9_resample_True_lr_0.1",
-        "../outputs/vd_pg_presentation/loop/max/lower_bound/lambda_0.01/alpha_0.1/reset_policy_True/post_samples_1000_delta_0.9_resample_True_lr_0.1",
-        "../outputs/vd_pg_presentation/loop/max/lower_bound/lambda_0.01/alpha_0.25/reset_policy_True/post_samples_1000_delta_0.9_resample_True_lr_0.1",
+        "../outputs/vd_pg_tests_2/chain/max/cvar/lambda_0.1/alpha_0.1/reset_policy_True/post_samples_1000_delta_0.9_resample_True_lr_0.1",
+        "../outputs/vd_pg_tests_2/chain/max/cvar/lambda_0.05/alpha_0.1/reset_policy_True/post_samples_1000_delta_0.9_resample_True_lr_0.1",
         # "../outputs/vd_pg_presentation/loop/max/lower_bound/lambda_0.1/alpha_0.01/reset_policy_True/post_samples_1000_delta_0.9_resample_True_lr_0.1",
         # "../outputs/vd_pg_presentation/loop/max/lower_bound/lambda_0.1/alpha_0.1/reset_policy_True/post_samples_1000_delta_0.9_resample_True_lr_0.1",
         # "../outputs/vd_pg_presentation/loop/max/lower_bound/lambda_0.1/alpha_0.25/reset_policy_True/post_samples_1000_delta_0.9_resample_True_lr_0.1",
 
     ]
     labels = [
-        "low_l_low_a", "low_l_mid_a", "low_l_high_a",
+        "high_l", "low_l",
         # "high_l_low_a", "high_l_mid_a", "high_l_high_a"
     ]
-    out_dir = "ablation_alpha/"
-    suffix = "loop_low_l"
+    out_dir = "long_test/"
+    suffix = ""
     env = dirs[0].split("/")[3]
     separate = False
     more_seeds = True

@@ -13,7 +13,7 @@ from envs.wide_narrow import WideNarrow
 from envs.basic_envs import SimpleMDP
 from envs.gridworld import GridWorld
 from src.policy import Policy, SoftmaxPolicy, LogisticPolicy
-from src.utils import value_iteration
+from src.utils import value_iteration, Parameter, LinearParameter, ExponentialParameter
 from src.model import DirichletModel
 from basic_pg import policy_performance
 import seaborn as sns
@@ -30,7 +30,7 @@ def collect_samples_and_update_prior(agent, env, num_samples):
             env.reset()
 
 
-def compute_statistics(values, objective_type, regularization, grads=None):
+def compute_statistics(values, objective_type, regularization, alpha, delta, grads=None):
     values = np.asarray(values)
     L_pi = values.shape[0]
     sorted_values = np.sort(values)
@@ -109,7 +109,9 @@ def policy_optimization(agent, policy_performance, num_posterior_samples=100, ga
         avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective,\
             regularization_term, grad, constraint_grad = compute_statistics(values=U_pi, objective_type=objective_type,
                                                                             regularization=regularization,
-                                                                            grads=U_pi_grads)
+                                                                            grads=U_pi_grads,
+                                                                            alpha=alpha,
+                                                                            delta=delta)
 
         objective += lambda_ * regularization_term
         p_grad = grad + lambda_ * constraint_grad
@@ -154,6 +156,10 @@ def parse_args():
     parser.add_argument('--temp', type=float, default=1., help="Temperature of softmax policy")
     parser.add_argument('--tolerance', type=float, default=1e-3, help="Inner optimization tolerance")
     parser.add_argument('--lambda_', type=float, default=0., help="Regularization coefficient")
+    parser.add_argument('--lambda_schedule', type=str, default="const", choices=["const", "linear", "exponential"],
+                        help="Regularization coefficient schedule")
+    parser.add_argument('--lambda_exponent', type=float, default=1.,
+                        help="Exponent for the exponential lambda schedule")
     parser.add_argument('--verbose', type=int, default=10, help="Print logs")
     parser.add_argument('--period', type=int, default=10, help="Frequency of distribution plot")
     parser.add_argument('--show', action="store_true", help="Display plot at the end")
@@ -197,8 +203,10 @@ if __name__ == "__main__":
     resample = args.resample
     num_posterior_samples = args.posterior_samples
     lambda_ = args.lambda_
+    lambda_exponent = args.lambda_exponent
     objective_type = args.objective
     regularization = args.regularization
+    lambda_schedule = args.lambda_schedule
     alpha = args.alpha
     delta = args.delta
     verbose = args.verbose
@@ -207,10 +215,11 @@ if __name__ == "__main__":
     results = []
     distributions = []
     initial_distributions = []
-    save_dir = args.base_dir + "outputs/" + root_dir + "/" + environment + "/" + objective_type + "/" + regularization + "/lambda_" + \
-               str(lambda_)[:4] + "/alpha_" + str(alpha)[:4] + "/reset_policy_" + str(reset_policy) + "/post_samples_" \
-               + str(num_posterior_samples) + "_delta_" + str(delta) + "_resample_" + str(resample) + \
-               "_lr_" + str(learning_rate)[:4]
+    save_dir = args.base_dir + "outputs/" + root_dir + "/" + environment + "/" + objective_type + "/" + regularization \
+               + "/" + lambda_schedule + "/lambda_" + str(lambda_)[:4]\
+               + "/alpha_" + str(alpha)[:4] + "/reset_policy_" + str(reset_policy) + "/post_samples_" \
+               + str(num_posterior_samples) + "_delta_" + str(delta) + "_resample_" + str(resample) \
+               + "_lr_" + str(learning_rate)[:4]
     save_dir += suffix
     save_dir += "/s" + str(seed) + "/"
 
@@ -237,6 +246,16 @@ if __name__ == "__main__":
             ylims = (0, 800)
     else:
             raise ValueError("Env not implemented:" + environment)
+
+    if lambda_schedule == "const":
+        lambda_param = Parameter(value=lambda_)
+    elif lambda_schedule == "linear":
+        lambda_param = LinearParameter(value=lambda_, threshold_value=0., n=iterations)
+    elif lambda_schedule == "exponential":
+        lambda_param = ExponentialParameter(value=lambda_, exp=lambda_exponent)
+    else:
+        raise ValueError("Lambda schedule not implemented:" + lambda_schedule)
+
 
     nState = env.nState
     nAction = env.nAction
@@ -297,10 +316,11 @@ if __name__ == "__main__":
         lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound, grad_norm, converged,\
             it, U_pi_j, initial_distribution, objective = policy_optimization(agent=agent, policy_performance=policy_performance,
                                      num_posterior_samples=num_posterior_samples, objective_type=objective_type,
-                                     regularization=regularization, lambda_=lambda_, alpha=alpha, delta=delta,
+                                     regularization=regularization, lambda_=lambda_param(), alpha=alpha, delta=delta,
                                      optimization_iterations=max_iters, optimization_tolerance=tolerance,
                                      policy_lr=learning_rate, reset_policy=reset_policy, resample=resample,
                                      )
+        lambda_param.update()
         mdp = (true_R, true_P)
         policy_perfo = agent._policy_performance(mdp, agent.policy.get_params())
         results.append([lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound,

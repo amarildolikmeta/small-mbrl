@@ -225,6 +225,64 @@ def value_iteration(P, R, gamma, max_iter=1000, tol=1e-3, verbose=False, qs =Fal
         return pi, V
 
 
+class Parameter:
+    def __init__(self, value, min_value=None, max_value=None):
+        self._initial_value = value
+        self._min_value = min_value
+        self._max_value = max_value
+        self._n_updates = 0
+
+    def __call__(self):
+        return self.get_value()
+
+    def get_value(self):
+        new_value = self._compute()
+
+        if self._min_value is None and self._max_value is None:
+            return new_value
+        else:
+            return np.clip(new_value, self._min_value, self._max_value)
+
+    def _compute(self, *idx, **kwargs):
+        return self._initial_value
+
+    def update(self):
+        self._n_updates += 1
+
+
+class LinearParameter(Parameter):
+    """
+    This class implements a linearly changing parameter according to the number
+    of times it has been used.
+
+    """
+    def __init__(self, value, threshold_value, n):
+        self._coeff = (threshold_value - value) / n
+
+        if self._coeff >= 0:
+            super().__init__(value, None, threshold_value)
+        else:
+            super().__init__(value, threshold_value, None)
+
+    def _compute(self):
+        return self._coeff * self._n_updates + self._initial_value
+
+
+class ExponentialParameter(Parameter):
+    """
+    This class implements a exponentially changing parameter according to the
+    number of times it has been used.
+
+    """
+    def __init__(self, value, exp=1., min_value=None, max_value=None):
+        self._exp = exp
+
+        super().__init__(value, min_value, max_value)
+
+    def _compute(self):
+        n = np.maximum(self._n_updates, 1)
+        return self._initial_value / n ** self._exp
+
 
 if __name__ == "__main__":
     rewards = [1, 2, 3, 4]
