@@ -217,7 +217,7 @@ if __name__ == "__main__":
     results = []
     distributions = []
     initial_distributions = []
-    save_dir = args.base_dir + "outputs/" + root_dir + "/" + environment + "/uniform_" + uniform + "/" \
+    save_dir = args.base_dir + "outputs/" + root_dir + "/" + environment + "/uniform_" + str(uniform) + "/" \
                + objective_type + "/" + regularization \
                + "/" + lambda_schedule + "/lambda_" + str(lambda_)[:4] \
                + "/alpha_" + str(alpha)[:4] + "/reset_policy_" + str(reset_policy) + "/post_samples_" \
