@@ -79,12 +79,12 @@ def compute_statistics(values, objective_type, regularization, alpha, delta, gra
     if grads is None:
         grad = None
         constraint_grad = None
-    return avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective, regularization_term, grad,\
+    return avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective, regularization_term, grad, \
         constraint_grad
 
 
 def policy_optimization(agent, policy_performance, num_posterior_samples=100, gamma=0.99, objective_type="max",
-                        regularization="cvar", alpha=0.1, delta=0.9, lambda_=0.,  optimization_iterations=100,
+                        regularization="cvar", alpha=0.1, delta=0.9, lambda_=0., optimization_iterations=100,
                         optimization_tolerance=1e-4, policy_lr=1., reset_policy=False, resample=False):
     p_params = agent.policy.get_params()
     R_j, P_j = agent.multiple_sample_mdp(num_posterior_samples)
@@ -106,7 +106,7 @@ def policy_optimization(agent, policy_performance, num_posterior_samples=100, ga
         U_pi = np.asarray(U_pi_j)
         U_pi_grads = np.asarray(U_pi_j_grad)
 
-        avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective,\
+        avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective, \
             regularization_term, grad, constraint_grad = compute_statistics(values=U_pi, objective_type=objective_type,
                                                                             regularization=regularization,
                                                                             grads=U_pi_grads,
@@ -125,7 +125,7 @@ def policy_optimization(agent, policy_performance, num_posterior_samples=100, ga
     p_params = agent.policy.get_params()
     U_pi_j, U_pi_j_grad = jax.lax.stop_gradient(vmap_grad(R_j, P_j, p_params, init_dist,
                                                           nState, nAction, gamma))
-    return lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound, grad_norm,\
+    return lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound, grad_norm, \
         converged, it, U_pi_j, initial_distribution, objective
 
 
@@ -165,6 +165,7 @@ def parse_args():
     parser.add_argument('--show', action="store_true", help="Display plot at the end")
     parser.add_argument('--suffix', type=str, default='', help="Last folder of logs")
     parser.add_argument('--root_dir', type=str, default='vd_pg_tests_2', help="First folder of logs")
+    parser.add_argument('--uniform', action="store_true", help="Use random initial distribution")
 
     "upper_cvar"  # ["max", "upper_cvar", "upper_delta", "pg"]
     "cvar"  # ["cvar", "lower_bound"]
@@ -212,11 +213,13 @@ if __name__ == "__main__":
     verbose = args.verbose
     suffix = args.suffix
     root_dir = args.root_dir
+    uniform = args.uniform
     results = []
     distributions = []
     initial_distributions = []
-    save_dir = args.base_dir + "outputs/" + root_dir + "/" + environment + "/" + objective_type + "/" + regularization \
-               + "/" + lambda_schedule + "/lambda_" + str(lambda_)[:4]\
+    save_dir = args.base_dir + "outputs/" + root_dir + "/" + environment + "/uniform_" + uniform + "/" \
+               + objective_type + "/" + regularization \
+               + "/" + lambda_schedule + "/lambda_" + str(lambda_)[:4] \
                + "/alpha_" + str(alpha)[:4] + "/reset_policy_" + str(reset_policy) + "/post_samples_" \
                + str(num_posterior_samples) + "_delta_" + str(delta) + "_resample_" + str(resample) \
                + "_lr_" + str(learning_rate)[:4]
@@ -224,28 +227,28 @@ if __name__ == "__main__":
     save_dir += "/s" + str(seed) + "/"
 
     if environment == "loop":
-            env = DoubleLoop(seed=seed, gamma=gamma)
-            ylims = (-100, 100)
+        env = DoubleLoop(seed=seed, gamma=gamma, uniform=uniform)
+        ylims = (-100, 100)
     elif environment == "chain":
-            env = Chain(discount=gamma, seed=seed)
-            ylims = (0, 800)
+        env = Chain(discount=gamma, seed=seed, uniform=uniform)
+        ylims = (0, 800)
     elif environment == "sixarms":
-            env = SixArms(gamma=gamma, seed=seed)
-            ylims = (0, 800)
+        env = SixArms(gamma=gamma, seed=seed, uniform=uniform)
+        ylims = (0, 800)
     elif environment == "threearms":
-            env = TreeArms(gamma=gamma, seed=seed)
-            ylims = (0, 800)
+        env = TreeArms(gamma=gamma, seed=seed)
+        ylims = (0, 800)
     elif environment == "widenarrow":
-            env = WideNarrow(gamma=gamma, seed=seed)
-            ylims = (0, 800)
+        env = WideNarrow(gamma=gamma, seed=seed)
+        ylims = (0, 800)
     elif environment == "2_state":
-            env = SimpleMDP(gamma=gamma, seed=seed)
-            ylims = (0, 800)
+        env = SimpleMDP(gamma=gamma, seed=seed)
+        ylims = (0, 800)
     elif environment == "grid":
-            env = GridWorld(gamma=gamma, seed=seed)
-            ylims = (0, 800)
+        env = GridWorld(gamma=gamma, seed=seed)
+        ylims = (0, 800)
     else:
-            raise ValueError("Env not implemented:" + environment)
+        raise ValueError("Env not implemented:" + environment)
 
     if lambda_schedule == "const":
         lambda_param = Parameter(value=lambda_)
@@ -256,16 +259,15 @@ if __name__ == "__main__":
     else:
         raise ValueError("Lambda schedule not implemented:" + lambda_schedule)
 
-
     nState = env.nState
     nAction = env.nAction
 
     if use_softmax:
-            policy = SoftmaxPolicy(nState, nAction, temp, seed)
+        policy = SoftmaxPolicy(nState, nAction, temp, seed)
     elif use_logistic:
-            policy = LogisticPolicy(nState, nAction, temp, seed)
+        policy = LogisticPolicy(nState, nAction, temp, seed)
     else:
-            policy = Policy(nState, nAction, temp, seed)
+        policy = Policy(nState, nAction, temp, seed)
 
     true_R = env.R
     true_P = env.P
@@ -313,13 +315,20 @@ if __name__ == "__main__":
     ax.legend()
     for i in range(iterations):
         collect_samples_and_update_prior(agent, env, environment_samples_per_iteration)
-        lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound, grad_norm, converged,\
-            it, U_pi_j, initial_distribution, objective = policy_optimization(agent=agent, policy_performance=policy_performance,
-                                     num_posterior_samples=num_posterior_samples, objective_type=objective_type,
-                                     regularization=regularization, lambda_=lambda_param(), alpha=alpha, delta=delta,
-                                     optimization_iterations=max_iters, optimization_tolerance=tolerance,
-                                     policy_lr=learning_rate, reset_policy=reset_policy, resample=resample,
-                                     )
+        lower_bound, var_alpha, cvar_alpha, avg_performance, cvar_delta, var_delta, upper_bound, grad_norm, converged, \
+            it, U_pi_j, initial_distribution, objective = policy_optimization(agent=agent,
+                                                                              policy_performance=policy_performance,
+                                                                              num_posterior_samples=num_posterior_samples,
+                                                                              objective_type=objective_type,
+                                                                              regularization=regularization,
+                                                                              lambda_=lambda_param(), alpha=alpha,
+                                                                              delta=delta,
+                                                                              optimization_iterations=max_iters,
+                                                                              optimization_tolerance=tolerance,
+                                                                              policy_lr=learning_rate,
+                                                                              reset_policy=reset_policy,
+                                                                              resample=resample,
+                                                                              )
         lambda_param.update()
         mdp = (true_R, true_P)
         policy_perfo = agent._policy_performance(mdp, agent.policy.get_params())
@@ -384,7 +393,8 @@ if __name__ == "__main__":
 
         avg_performance, cvar_alpha, cvar_delta, var_alpha, var_delta, upper_bound, lower_bound, objective, \
             regularization_term, _, _ = \
-            compute_statistics(values=values, objective_type=objective_type, regularization=regularization, grads=None)
+            compute_statistics(values=values, objective_type=objective_type, regularization=regularization, grads=None,
+                               delta=delta, alpha=alpha)
 
         ax = axs[i // period][1]
         _x_min = np.min(values)

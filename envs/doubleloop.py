@@ -5,13 +5,16 @@ from src.utils import value_iteration
 
 
 class DoubleLoop:
-    def __init__(self, seed=None, gamma=0.99) -> None:
+    def __init__(self, seed=None, gamma=0.99, uniform=False) -> None:
         self.nState = 9 
         self.nAction = 2
         self.gamma = gamma
-        dist = np.zeros(self.nState)
-        dist[0] = 1.0
-        self.initial_distribution = dist
+        self.uniform = uniform
+        if self.uniform:
+            self.initial_distribution = np.ones(self.nState) / self.nState
+        else:
+            self.initial_distribution = np.zeros(self.nState)
+            self.initial_distribution[0] = 1.
         self.state = 0   
         self.rng = np.random.RandomState(seed)
         self.P = np.zeros((9, 2, 9))
@@ -27,9 +30,10 @@ class DoubleLoop:
             self.P[i, 1, i + 1] = 1.
         self.P[8, :, 0] = 1.
         self.R[8, :] = 2.
+        self.reset()
 
     def reset(self):
-        self.state = 0
+        self.state = np.random.choice(self.nState, p=self.initial_distribution)
         return self.state
 
     def step(self, action):

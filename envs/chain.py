@@ -40,7 +40,7 @@ class Chain:
     A Bayesian Framework for Reinforcement Learning by Malcolm Strens (2000)
     http://ceit.aut.ac.ir/~shiry/lecture/machine-learning/papers/BRL-2000.pdf
     """
-    def __init__(self, nState=5, prob_slip=0.2, discount=0.99, seed=None, small=2., large=10.):
+    def __init__(self, nState=5, prob_slip=0.2, discount=0.99, seed=None, small=2., large=10., uniform=False):
         self.prob_slip = prob_slip  # probability of 'slipping' an action
         self.small = small  # payout for 'backwards' action
         self.large = large  # payout at end of chain for 'forwards' action
@@ -48,18 +48,22 @@ class Chain:
         self.nAction = 2
         self.nState = nState
         self.discount = self.gamma = discount
-        self.initial_distribution = np.zeros(self.nState)
-        self.initial_distribution[0] = 1.
+        self.uniform = uniform
+        if self.uniform:
+            self.initial_distribution = np.ones(self.nState) / self.nState
+        else:
+            self.self.initial_distribution = np.zeros(self.nState)
+            self.initial_distribution[0] = 1.
         self.rng = np.random.RandomState(seed)
         self.P = compute_probabilities(slip=prob_slip, nS=nState, nA=2)
         self.R = np.sum(self.P * compute_rewards(nS=nState, nA=2, small=small, large=large), axis=2)
-
+        self.reset()
 
     def get_name(self):
         return f'Chain{self.nState}StateSlip{self.prob_slip}'
 
     def reset(self):
-        self.state = 0
+        self.state = np.random.choice(self.nState, p=self.initial_distribution)
         return self.state
 
     def reset_to_state(self, state):

@@ -48,7 +48,7 @@ def compute_mu(nS):
     return mu
 
 class SixArms:
-    def __init__(self, gamma=0.99, seed=None):
+    def __init__(self, gamma=0.99, seed=None, uniform=False):
         self.discount = self.gamma = gamma
         self.rng = np.random.RandomState(seed)
         nA = 6
@@ -57,7 +57,11 @@ class SixArms:
         self.nAction = nA
         rew = [50, 133, 300, 800, 1660, 6000]
         rew = (np.array(rew) / 6000).tolist()
-        self.initial_distribution = compute_mu(nS)
+        self.uniform = uniform
+        if self.uniform:
+            self.initial_distribution = np.ones(self.nState) / self.nState
+        else:
+            self.initial_distribution = compute_mu(nS)
         self.P = compute_probabilities(nS=nS, nA=nA)
         self.R = np.sum(self.P * compute_rewards(nS, nA, rew), axis=2)
         self.reset()
