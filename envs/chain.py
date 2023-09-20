@@ -52,7 +52,7 @@ class Chain:
         if self.uniform:
             self.initial_distribution = np.ones(self.nState) / self.nState
         else:
-            self.self.initial_distribution = np.zeros(self.nState)
+            self.initial_distribution = np.zeros(self.nState)
             self.initial_distribution[0] = 1.
         self.rng = np.random.RandomState(seed)
         self.P = compute_probabilities(slip=prob_slip, nS=nState, nA=2)
