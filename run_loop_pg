@@ -2,6 +2,6 @@
 
 for s in {1..10}; do
         for k in {1..10}; do
-         python3 vd_pg.py --seed 0 --base_dir /data/amarildo/outputs2 --uniform --environment loop --objective pg --regularization cvar --alpha 0.1 --delta 0.9 --use_softmax --lr 0.1 --resample --reset_policy $
+         python3 vd_pg.py --seed 0 --base_dir /data/amarildo/outputs2 --uniform --environment loop --objective pg --regularization cvar --alpha 0.1 --delta 0.9 --use_softmax --lr 0.1 --resample --reset_policy --max_iters 100 --iterations 1000 --samples 100 --posterior_samples 1000 --lambda_ 0.
         done &
 done
